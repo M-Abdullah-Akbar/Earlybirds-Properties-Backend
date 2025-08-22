@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+Earlybirds-Properties-Admin-Portal/
+testutils/
+backend/src/images.jpeg
+backend/src/low-quality-enhancer-hero-before.webp
+backend/src/pexels-scottwebb-1029599.jpg
+backend/src/property_1754729550666_pexels-scottwebb-1029599_thumb.webp
+backend/src/SampleJPGImage_10mbmb.jpg
+
+# Environment variables
+backend/.env
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+*.pid
+
+# Coverage directory
+coverage/
+
+# Optional npm cache directory
+.npm
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+.tmp/
+
+# Development tools
+.zencoder/
