@@ -1,4 +1,4 @@
-﻿const { body, query, param, validationResult } = require("express-validator");
+const { body, query, param, validationResult } = require("express-validator");
 const {
   EMIRATE_AREA_MAP,
   PROPERTY_TYPE_AMENITIES_MAP,
@@ -1914,10 +1914,22 @@ const userQueryValidation = [sanitizeInput, ...validateUserQuery];
  */
 const singleUserValidation = [sanitizeInput, ...validateObjectId];
 
+/**
+ * Validation rules for creating properties without images
+ */
+const createPropertyWithoutImagesValidation = [
+  // Basic property information
+  validateCreateProperty,
+
+  // Process validation results
+  handleValidationErrors,
+];
+
 module.exports = {
   loginValidation,
   changePasswordValidation,
   createPropertyWithImagesValidation,
+  createPropertyWithoutImagesValidation,
   updatePropertyValidation,
   propertyQueryValidation,
   singlePropertyValidation,

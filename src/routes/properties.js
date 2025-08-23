@@ -7,6 +7,7 @@ const {
   getProperties,
   getProperty,
   createPropertyWithImages,
+  createPropertyWithoutImages,
   updateProperty,
   deleteProperty,
   deletePropertyImage,
@@ -23,6 +24,7 @@ const {
 } = require("../middleware/imageUpload");
 const {
   createPropertyWithImagesValidation,
+  createPropertyWithoutImagesValidation,
   updatePropertyValidation,
   propertyQueryValidation,
   singlePropertyValidation,
@@ -98,6 +100,19 @@ router.post(
   checkPermission("properties", "Create"),
   createPropertyWithImagesValidation,
   createPropertyWithImages
+);
+
+/**
+ * @route   POST /api/properties
+ * @desc    Create property without images
+ * @access  Admin only
+ */
+router.post(
+  "/",
+  auth,
+  checkPermission("properties", "Create"),
+  createPropertyWithoutImagesValidation,
+  createPropertyWithoutImages
 );
 
 router

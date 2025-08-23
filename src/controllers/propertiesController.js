@@ -475,6 +475,59 @@ const createPropertyWithImages = async (req, res) => {
 };
 
 /**
+ * Create property without images
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const createPropertyWithoutImages = async (req, res) => {
+  try {
+    // ACL middleware has already verified admin permissions
+    const propertyData = {
+      ...req.body,
+      createdBy: req.user.id,
+      // Initialize with empty images array
+      images: []
+    };
+
+    const property = new Property(propertyData);
+    await property.save();
+
+    // Prepare response object
+    const response = {
+      success: true,
+      data: {
+        property,
+      },
+      message: "Property created successfully without images",
+    };
+
+    // Add warnings if any exist
+    if (req.validationWarnings && req.validationWarnings.length > 0) {
+      response.warnings = req.validationWarnings;
+    }
+
+    res.status(201).json(response);
+  } catch (error) {
+    console.error("Error creating property without images:", error);
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: errors,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to create property without images",
+    });
+  }
+};
+
+/**
  * Update property (Admin only)
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -843,6 +896,7 @@ module.exports = {
   getProperties,
   getProperty,
   createPropertyWithImages,
+  createPropertyWithoutImages,
   updateProperty,
   deleteProperty,
   deletePropertyImage,
