@@ -26,6 +26,9 @@ const allowedOrigins = [
   process.env.Admin_URL,
   process.env.User_URL,
   process.env.BASE_URL,
+  "https://earlybirds-properties-backend.vercel.app",
+  "https://singular-cupcake-772ab9.netlify.app",
+  "https://vocal-genie-167c56.netlify.app",
   "http://localhost:3000",
   "http://localhost:3001",
 ].filter(Boolean); // Remove any undefined values
