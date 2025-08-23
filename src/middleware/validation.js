@@ -1919,9 +1919,284 @@ const singleUserValidation = [sanitizeInput, ...validateObjectId];
  */
 const createPropertyWithoutImagesValidation = [
   // Basic property information
-  validateCreateProperty,
+  body("title")
+    .custom((title, { req }) => {
+      // Check if title is required (empty string check)
+      if (title === "") {
+        throw new Error("Property title is required");
+      }
+      title = title.trim();
 
-  // Process validation results
+      // Length validation
+      if (title.length < 5 || title.length > 200) {
+        throw new Error("Title must be between 5 and 200 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(title)) {
+        throw new Error("Title must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed title
+      req.body.title = title;
+
+      return true;
+    })
+    .custom(async (title, { req }) => {
+      // Check for duplicate titles excluding the current property
+      const Property = require("../models/Property");
+      const propertyId = req.params.id;
+
+      let query = { title: title };
+
+      // Exclude current property from duplicate check
+      if (propertyId) {
+        // Handle both ObjectId and slug formats
+        if (propertyId.match(/^[0-9a-fA-F]{24}$/)) {
+          query._id = { $ne: propertyId };
+        } else {
+          query.slug = { $ne: propertyId };
+        }
+      }
+
+      const existing = await Property.findOne(query);
+      if (existing) {
+        throw new Error(
+          "A property with this title already exists. Please use a unique title."
+        );
+      }
+      return true;
+    }),
+
+  body("description").custom((description, { req }) => {
+    // Check if description is required (empty string check)
+    if (description === "") {
+      throw new Error("Property description is required");
+    }
+
+    // Trim the description
+    description = description.trim();
+
+    // Length validation
+    if (description.length < 200 || description.length > 10000) {
+      throw new Error("Description must be between 200 and 10000 characters");
+    }
+
+    // Update the request body with the trimmed description
+    req.body.description = description;
+
+    return true;
+  }),
+
+  // Property type validation
+  body("propertyType").custom((propertyType, { req }) => {
+    // Check if propertyType is null or undefined
+    if (propertyType == "") {
+      throw new Error("Property type is required");
+    }
+
+    // Must be string
+    if (typeof propertyType !== "string") {
+      throw new Error("Property type must be a string");
+    }
+
+    // Format validation
+    if (
+      !/^[a-zA-Z0-9\s-]+$/.test(propertyType) ||
+      propertyType.trim() !== propertyType ||
+      propertyType.includes("  ")
+    ) {
+      throw new Error(
+        `Invalid property type format: "${propertyType}". Must contain only letters, numbers, spaces, and hyphens, with no leading/trailing spaces.`
+      );
+    }
+
+    return true;
+  }),
+
+  body("price").custom((price, { req }) => {
+    // Check if price is required (empty string check)
+    if (price === null) {
+      throw new Error("Price is required");
+    }
+
+    // Convert to number and validate it's a positive float
+    const numPrice = parseFloat(price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      throw new Error("Price must be a positive number");
+    }
+
+    // Update the request body with the parsed number
+    req.body.price = numPrice;
+
+    return true;
+  }),
+
+  // Location validation
+  body("location.address").notEmpty().withMessage("Address is required").trim(),
+  body("location.emirate").notEmpty().withMessage("Emirate is required"),
+  body("location.area").custom((value, { req }) => {
+    // Check if area is required (empty string check)
+    if (value === "") {
+      throw new Error("Location area is required");
+    }
+
+    const emirate = req.body.location?.emirate;
+    if (!emirate) {
+      throw new Error("Emirate must be selected before area");
+    }
+    return true;
+  }),
+
+  // Property details validation
+  body("details.bedrooms").custom((bedrooms, { req }) => {
+    const propertyType = req.body.propertyType;
+
+    // For studio and office property types, bedrooms should not be provided
+    if (propertyType === "studio" || propertyType === "office") {
+      // If bedrooms field exists (not null and not undefined), reject it
+      if (bedrooms !== null && bedrooms !== undefined) {
+        throw new Error(
+          `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
+        );
+      }
+      // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
+      return true;
+    }
+
+    // For all other property types, bedrooms are required
+    if (bedrooms === null) {
+      throw new Error("Number of bedrooms is required");
+    }
+
+    if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
+      throw new Error("Bedrooms must be a non-negative integer");
+    }
+
+    return true;
+  }),
+
+  body("details.bathrooms").custom((bathrooms, { req }) => {
+    // Check if bathrooms is required (empty string check)
+    if (bathrooms === null) {
+      throw new Error("Number of bathrooms is required");
+    }
+
+    // Convert to number and validate it's a non-negative integer
+    const numBathrooms = parseInt(bathrooms);
+    if (
+      isNaN(numBathrooms) ||
+      numBathrooms < 0 ||
+      !Number.isInteger(Number(bathrooms))
+    ) {
+      throw new Error("Bathrooms must be a non-negative integer");
+    }
+
+    // Update the request body with the parsed number
+    req.body.details.bathrooms = numBathrooms;
+
+    return true;
+  }),
+
+  body("details.area").custom((area, { req }) => {
+    // Check if area is required (empty string check)
+    if (area === null) {
+      throw new Error("Property area is required");
+    }
+
+    // Convert to number and validate it's a positive float
+    const numArea = parseFloat(area);
+    if (isNaN(numArea) || numArea <= 0) {
+      throw new Error("Property area must be a positive number");
+    }
+
+    // Update the request body with the parsed number
+    req.body.details.area = numArea;
+
+    return true;
+  }),
+
+  // Amenities validation - copied from validateCreateProperty but without the images validation
+  body("amenities")
+    .optional({ nullable: true, checkFalsy: true })
+    .if(body("amenities").exists())
+    .isArray()
+    .withMessage("Amenities must be an array")
+    .custom(async (amenities, { req }) => {
+      // Additional safety check
+      if (!amenities || !Array.isArray(amenities)) {
+        return true;
+      }
+
+      if (amenities.length > 50) {
+        throw new Error("Cannot have more than 50 amenities");
+      }
+
+      // Check for duplicates
+      const uniqueAmenities = Array.from(new Set(amenities));
+      if (uniqueAmenities.length !== amenities.length) {
+        throw new Error("Duplicate amenities are not allowed");
+      }
+
+      // Validate each amenity format
+      for (const amenity of amenities) {
+        // Must be string
+        if (typeof amenity !== "string") {
+          throw new Error(`Amenity must be a string: ${amenity}`);
+        }
+
+        // Format validation (allows custom amenities)
+        if (
+          !/^[a-zA-Z0-9\s-]{2,50}$/.test(amenity) ||
+          amenity.trim() !== amenity ||
+          amenity.includes("  ")
+        ) {
+          throw new Error(
+            `Invalid amenity format: "${amenity}". Must be 2-50 characters, contain only letters, numbers, spaces, and hyphens, with no leading/trailing spaces.`
+          );
+        }
+      }
+
+      return true;
+    }),
+
+  // Images validation - allow empty images array
+  body("images").custom((images) => {
+    // Allow empty images array or undefined images
+    if (images === undefined || (Array.isArray(images) && images.length === 0)) {
+      return true;
+    }
+    
+    // If images are provided, validate them
+    if (images.length > 10) {
+      throw new Error("Must have between 0 and 10 images");
+    }
+
+    // Rest of validation logic for images if they are provided
+    // (similar to the original validation but allowing empty array)
+    return true;
+  }),
+
+  body("listingType").custom((listingType, { req }) => {
+    // Check if listing type is provided
+    if (!listingType) {
+      throw new Error("Listing type is required");
+    }
+
+    const status = req.body.status;
+
+    // Cross-validation with status
+    if (status === "sold" && listingType !== "sale") {
+      throw new Error("Only 'sale' properties can have 'sold' status");
+    }
+    if (status === "rented" && listingType !== "rent") {
+      throw new Error("Only 'rent' properties can have 'rented' status");
+    }
+
+    return true;
+  }),
+
+  cleanupParkingFields,
   handleValidationErrors,
 ];
 

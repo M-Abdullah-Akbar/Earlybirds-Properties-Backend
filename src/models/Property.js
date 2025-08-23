@@ -173,7 +173,8 @@ const propertySchema = new mongoose.Schema(
     },
     images: {
       type: [imageSchema],
-      required: true,
+      required: false,
+      default: [],
     },
     featured: {
       type: Boolean,
