@@ -1,0 +1,5 @@
+# Ignore files
+node_modules
+.env
+package-lock.json
+VERCEL_DEPLOYMENT.md
