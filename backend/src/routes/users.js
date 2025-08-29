@@ -12,8 +12,10 @@ const {
   getUser,
   createUser,
   updateUser,
+  updateUserStatus,
   deleteUser,
   getUserStats,
+  transferPropertyOwnership,
 } = require("../controllers/usersController");
 
 // Import middleware
@@ -22,6 +24,7 @@ const { checkPermission } = require("../middleware/acl");
 const {
   createUserValidation,
   updateUserValidation,
+  updateUserStatusValidation,
   userQueryValidation,
   singleUserValidation,
 } = require("../middleware/validation");
@@ -83,5 +86,31 @@ router
     singleUserValidation,
     deleteUser
   );
+
+/**
+ * @route   PATCH /api/users/:id/status
+ * @desc    Update user status (active/inactive) - SuperAdmin only
+ * @access  SuperAdmin only
+ */
+router.patch(
+  "/:id/status",
+  auth,
+  checkPermission("users", "UpdateStatus"),
+  updateUserStatusValidation,
+  updateUserStatus
+);
+
+/**
+ * @route   PATCH /api/users/:id/transfer-properties
+ * @desc    Transfer property ownership from one user to another - SuperAdmin only
+ * @access  SuperAdmin only
+ */
+router.patch(
+  "/:id/transfer-properties",
+  auth,
+  checkPermission("users", "Update"),
+  singleUserValidation,
+  transferPropertyOwnership
+);
 
 module.exports = router;

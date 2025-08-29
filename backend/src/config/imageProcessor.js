@@ -30,20 +30,13 @@ const processImage = async (imageBuffer, options = {}) => {
     // Use the requested quality directly
     const smartQuality = quality;
 
-    console.log(
-      `🔍 Processing image: ${metadata.width}x${metadata.height}, quality: ${smartQuality}%`
-    );
-    console.log(`🔍 Preserving original dimensions (no resize needed)`);
-
     let sharpInstance = sharp(imageBuffer);
 
     // Apply pre-processing optimizations for better compression
     // (These don't change dimensions but can improve compression efficiency)
     if (smartQuality < 50) {
       // For aggressive compression, apply more pre-processing
-      console.log(
-        `🔧 Applying aggressive pre-processing for quality ${smartQuality}%`
-      );
+
       sharpInstance = sharpInstance
         .normalize() // Normalize image to improve compression
         .modulate({
@@ -78,9 +71,6 @@ const processImage = async (imageBuffer, options = {}) => {
 
     // For very low quality, enable additional compression features
     if (smartQuality < 30) {
-      console.log(
-        `🔧 Enabling ultra-compression mode for quality ${smartQuality}%`
-      );
       webpOptions.reductionEffort = 6; // Maximum reduction effort
       webpOptions.smartSubsample = false; // Disable smart subsampling for maximum compression
     }
@@ -88,14 +78,6 @@ const processImage = async (imageBuffer, options = {}) => {
     sharpInstance = sharpInstance.webp(webpOptions).withMetadata(false); // Strip all metadata to save additional bytes
 
     const processedBuffer = await sharpInstance.toBuffer();
-
-    console.log(
-      `✅ Image processed: ${imageBuffer.length} bytes → ${
-        processedBuffer.length
-      } bytes (${Math.round(
-        (1 - processedBuffer.length / imageBuffer.length) * 100
-      )}% reduction)`
-    );
 
     return processedBuffer;
   } catch (error) {

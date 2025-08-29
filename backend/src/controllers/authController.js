@@ -11,6 +11,7 @@ const login = async (req, res) => {
     // Input validation is now handled by middleware
 
     // Find user by username and include password
+
     const user = await User.findOne({ username }).select("+password");
 
     if (!user) {
@@ -21,7 +22,7 @@ const login = async (req, res) => {
     }
 
     // Check if user is active
-    if (user.status && user.status !== "active") {
+    if (!user.isActive) {
       return res.status(403).json({
         success: false,
         error: "Account is not active. Please contact SuperAdmin.",
@@ -70,6 +71,7 @@ const login = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          isActive: user.isActive,
           lastLogin: user.lastLogin,
         },
         token,
@@ -100,9 +102,6 @@ const changePassword = async (req, res) => {
 
     // Security check: Ensure user document exists (should always exist after authWithPassword)
     if (!user) {
-      console.error(
-        "🚨 CRITICAL: User document missing after authWithPassword middleware"
-      );
       return res.status(500).json({
         success: false,
         error: "Authentication error. Please try again.",
@@ -113,9 +112,6 @@ const changePassword = async (req, res) => {
     const isCurrentPasswordValid = await user.comparePassword(currentPassword);
 
     if (!isCurrentPasswordValid) {
-      console.log(
-        `❌ Failed password change attempt for user: ${user.username} - Incorrect current password`
-      );
       return res.status(401).json({
         success: false,
         error: "Current password is incorrect",

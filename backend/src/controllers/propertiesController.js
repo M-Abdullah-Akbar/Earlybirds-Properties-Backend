@@ -10,6 +10,52 @@ const fs = require("fs").promises;
 const path = require("path");
 
 /**
+ * Helper function to get valid status transitions
+ * This mirrors the frontend logic for consistency
+ */
+const getValidStatusTransitions = (
+  currentStatus,
+  previousStatus = undefined
+) => {
+  switch (currentStatus) {
+    case "draft":
+      // From draft: can only go to available (or stay draft)
+      return ["draft", "available"];
+    case "available":
+      // From available: can select any other status
+      return ["available", "pending", "sold", "rented", "archived"];
+    case "pending":
+      // From pending: can select any other status
+      return ["pending", "available", "sold", "rented", "archived"];
+    case "sold":
+    case "rented":
+      // From sold or rented: can only select archived (or keep current)
+      return [currentStatus, "archived"];
+    case "archived":
+      // From archived: can only go back to the previous status
+      const baseOptions = ["archived"];
+
+      if (previousStatus) {
+        // If we know the previous status, allow going back to it only
+        if (!baseOptions.includes(previousStatus)) {
+          baseOptions.push(previousStatus);
+        }
+      } else {
+        // This should not happen in normal flow since properties always have status history
+        // But if it does, we'll only allow staying archived to prevent invalid transitions
+        console.warn(
+          "⚠️ Archived property found without previousStatus - this should not happen"
+        );
+      }
+
+      return baseOptions;
+    default:
+      // Default: all except draft
+      return ["pending", "available", "sold", "rented", "archived"];
+  }
+};
+
+/**
  * Helper function to delete local image files
  * @param {string} publicId - The public ID of the image (filename without extension)
  */
@@ -21,32 +67,64 @@ const deleteLocalImageFiles = async (publicId) => {
         ? path.join(__dirname, "uploads") // dist/uploads
         : path.join(__dirname, "../uploads"); // backend/src/uploads
 
+    console.log(
+      `🗑️ DELETE DEBUG - Attempting to delete files for publicId: ${publicId}`
+    );
+    console.log(`🗑️ DELETE DEBUG - Upload directory: ${uploadDir}`);
+
+    // Extract base filename without extension if publicId already includes extension
+    let baseFilename = publicId;
+    const knownExtensions = [".webp", ".jpg", ".jpeg", ".png"];
+    const hasExtension = knownExtensions.some((ext) =>
+      publicId.toLowerCase().endsWith(ext)
+    );
+
+    if (hasExtension) {
+      // Remove extension to get base filename
+      const lastDotIndex = publicId.lastIndexOf(".");
+      baseFilename = publicId.substring(0, lastDotIndex);
+      console.log(
+        `🗑️ DELETE DEBUG - PublicId has extension, using base: ${baseFilename}`
+      );
+    }
+
     // List of possible file extensions and sizes
     const possibleFiles = [
-      `${publicId}.webp`,
-      `${publicId}_thumb.webp`,
-      `${publicId}_medium.webp`,
-      `${publicId}_large.webp`,
-      `${publicId}_original.webp`,
-      `${publicId}.jpg`,
-      `${publicId}.jpeg`,
-      `${publicId}.png`,
+      `${baseFilename}.webp`,
+      `${baseFilename}_thumb.webp`,
+      `${baseFilename}_medium.webp`,
+      `${baseFilename}_large.webp`,
+      `${baseFilename}_original.webp`,
+      `${baseFilename}.jpg`,
+      `${baseFilename}.jpeg`,
+      `${baseFilename}.png`,
     ];
 
+    // If publicId already had extension, also try the original filename as-is
+    if (hasExtension && !possibleFiles.includes(publicId)) {
+      possibleFiles.push(publicId);
+    }
+
+    let deletedCount = 0;
     const deletionPromises = possibleFiles.map(async (filename) => {
       const filePath = path.join(uploadDir, filename);
       try {
         await fs.access(filePath); // Check if file exists
         await fs.unlink(filePath); // Delete the file
-        console.log(`✅ Deleted local file: ${filename}`);
+        console.log(`🗑️ DELETE DEBUG - Successfully deleted: ${filename}`);
+        deletedCount++;
       } catch (error) {
-        // File doesn't exist or couldn't be deleted - this is okay
-        console.log(`ℹ️ File not found or already deleted: ${filename}`);
+        // File doesn't exist or couldn't be deleted
+        console.log(
+          `🗑️ DELETE DEBUG - File not found or couldn't delete: ${filename}`
+        );
       }
     });
 
     await Promise.all(deletionPromises);
-    console.log(`🗑️ Completed deletion attempt for publicId: ${publicId}`);
+    console.log(
+      `🗑️ DELETE DEBUG - Total files deleted for ${publicId}: ${deletedCount}`
+    );
   } catch (error) {
     console.error(
       `❌ Error deleting local files for publicId ${publicId}:`,
@@ -263,18 +341,36 @@ const getProperties = async (req, res) => {
       maxPrice,
       bedrooms,
       status,
+      approvalStatus,
+      search,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
 
-    // Start with ACL query filters (set by ACL middleware for visitors)
+    // Start with ACL query filters (set by ACL middleware based on user role)
     const filter = { ...req.queryFilters } || {};
 
     // Handle status filter based on user role
     const userRole = req.userRole || "visitor";
+
+    // Apply approval status filtering based on user role
+    if (userRole === "SuperAdmin") {
+      // SuperAdmin can see all non-draft properties regardless of approval status
+      // ACL middleware already excludes draft properties
+      // No additional filtering needed
+    } else if (userRole === "admin") {
+      // Admin can see their own properties (all approval statuses)
+      // ACL middleware already filters to own properties via createdBy
+      // No additional approval status filtering needed for own properties
+    } else {
+      // Visitors can only see approved properties
+      filter.approvalStatus = "approved";
+    }
+
+    // Handle listing status filter
     if (status) {
-      if (userRole === "admin") {
-        // Admin can filter by any status
+      if (userRole === "admin" || userRole === "SuperAdmin") {
+        // Admin and SuperAdmin can filter by any status
         filter.status = status;
       } else {
         // Visitors can only filter by published statuses
@@ -298,6 +394,54 @@ const getProperties = async (req, res) => {
       filter.price = {};
       if (minPrice) filter.price.$gte = parseInt(minPrice);
       if (maxPrice) filter.price.$lte = parseInt(maxPrice);
+    }
+
+    // Handle approval status filter for admin users
+    if (approvalStatus && (userRole === "admin" || userRole === "SuperAdmin")) {
+      // Override the default approval status filtering with user's specific choice
+      if (
+        approvalStatus === "pending" ||
+        approvalStatus === "approved" ||
+        approvalStatus === "rejected" ||
+        approvalStatus === "not_applicable"
+      ) {
+        // Remove any existing approval status filters
+        delete filter.approvalStatus;
+        delete filter.$or;
+
+        // Apply the specific approval status filter
+        filter.approvalStatus = approvalStatus;
+
+        // For admin users, also ensure they can only see their own properties or approved ones
+        if (userRole === "admin" && req.user && req.user.id) {
+          if (approvalStatus === "approved") {
+            // For approved properties, admin can see all approved properties
+            filter.approvalStatus = "approved";
+          } else {
+            // For pending/rejected, admin can only see their own
+            filter.$and = [
+              { approvalStatus: approvalStatus },
+              { createdBy: req.user.id },
+            ];
+            delete filter.approvalStatus; // Remove the direct filter since we're using $and
+          }
+        }
+      }
+    }
+
+    // Handle search filter
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      filter.$and = filter.$and || [];
+      filter.$and.push({
+        $or: [
+          { title: searchRegex },
+          { description: searchRegex },
+          { "location.address": searchRegex },
+          { "location.area": searchRegex },
+          { "location.emirate": searchRegex },
+        ],
+      });
     }
 
     // Build sort object
@@ -411,21 +555,48 @@ const createPropertyWithImages = async (req, res) => {
       createdBy: req.user.id,
     };
 
-    // Validate that images are provided in the request body
-    if (
-      !req.body.images ||
-      !Array.isArray(req.body.images) ||
-      req.body.images.length === 0
+    // Set approval status based on property status and user role
+    // Draft properties should not be in approval workflow
+    if (propertyData.status === "draft") {
+      propertyData.approvalStatus = "not_applicable"; // Draft properties are not in approval workflow
+    } else {
+      // SuperAdmin properties are automatically approved, others need approval
+      if (req.user.role === "SuperAdmin") {
+        propertyData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+        propertyData.approvedBy = req.user.id; // Set who approved it
+        propertyData.approvedAt = new Date(); // Set when it was approved
+      } else {
+        propertyData.approvalStatus = "pending"; // Non-draft properties need approval
+      }
+    }
+
+    // Handle images from either uploaded files or pre-processed data
+    let imageSource = null;
+    let imageData = [];
+
+    if (req.uploadedImages && req.uploadedImages.length > 0) {
+      // Images were just uploaded via file upload
+      imageSource = "uploaded";
+      imageData = req.uploadedImages;
+    } else if (
+      req.body.images &&
+      Array.isArray(req.body.images) &&
+      req.body.images.length > 0
     ) {
+      // Images were provided as pre-processed data
+      imageSource = "pre-processed";
+      imageData = req.body.images;
+    } else {
       return res.status(400).json({
         success: false,
-        error: "At least one property image is required in the images array.",
+        error:
+          "At least one property image is required. Either upload image files or provide pre-processed image data.",
       });
     }
 
-    propertyData.images = req.body.images.map((image, index) => {
+    propertyData.images = imageData.map((image, index) => {
       return {
-        url: image.url, // Use large image as main URL
+        url: image.url, // Use image URL
         publicId: image.publicId,
         altText: image.altText || `Property image ${index + 1}`,
         order: image.order !== undefined ? image.order : index,
@@ -445,7 +616,7 @@ const createPropertyWithImages = async (req, res) => {
       data: {
         property,
       },
-      message: `Property created successfully with ${propertyData.images.length} pre-uploaded images`,
+      message: `Property created successfully with ${propertyData.images.length} ${imageSource} images`,
     };
 
     // Add warnings if any exist
@@ -456,6 +627,39 @@ const createPropertyWithImages = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error("Error creating property with images:", error);
+
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+
+      // Provide user-friendly error messages
+      let userFriendlyField = field;
+      let userFriendlyMessage = `${
+        field.charAt(0).toUpperCase() + field.slice(1)
+      } already exists`;
+
+      if (field === "slug") {
+        userFriendlyField = "title"; // Map slug errors to title field for frontend
+        userFriendlyMessage =
+          "A property with this title already exists. Please choose a different title.";
+      }
+
+      const errorResponse = {
+        success: false,
+        error: `Property with this ${
+          field === "slug" ? "title" : field
+        } already exists`,
+        details: [
+          {
+            field: userFriendlyField,
+            message: userFriendlyMessage,
+          },
+        ],
+      };
+
+      return res.status(400).json(errorResponse);
+    }
 
     // Handle validation errors
     if (error.name === "ValidationError") {
@@ -502,7 +706,8 @@ const updateProperty = async (req, res) => {
     // Check ownership for admin users (SuperAdmin can update any property)
     if (req.requireOwnership && req.userRole === "admin") {
       const ownerId = existingProperty.createdBy?.toString();
-      if (ownerId !== req.user.id) {
+
+      if (ownerId !== req.user.id.toString()) {
         return res.status(403).json({
           success: false,
           error: "Access denied - You can only update properties you created",
@@ -512,6 +717,17 @@ const updateProperty = async (req, res) => {
 
     // Property data is now parsed by middleware and available in req.body
     const propertyData = req.body;
+    console.log("=== UPDATE PROPERTY DEBUG ===");
+    console.log("Received emirate:", propertyData.location?.emirate);
+    console.log(
+      "Received area:",
+      propertyData.location?.area,
+      "(type:",
+      typeof propertyData.location?.area,
+      ")"
+    );
+    console.log("Existing emirate:", existingProperty.location?.emirate);
+    console.log("Existing area:", existingProperty.location?.area);
     console.log(
       "✅ Using property data from req.body:",
       Object.keys(propertyData)
@@ -525,58 +741,223 @@ const updateProperty = async (req, res) => {
       const currentStatus = existingProperty.status;
       const newStatus = propertyData.status;
 
-      // Define invalid status transitions
-      const invalidTransitions = {
-        available: ["draft"],
-        archived: ["draft"],
-        sold: ["rented", "available", "draft"],
-      };
+      // Validate status transitions using the same logic as frontend
+      const allowedStatuses = getValidStatusTransitions(
+        currentStatus,
+        existingProperty.previousStatus
+      );
 
-      // Check if the transition is invalid
-      if (
-        invalidTransitions[currentStatus] &&
-        invalidTransitions[currentStatus].includes(newStatus)
-      ) {
+      if (!allowedStatuses.includes(newStatus)) {
         return res.status(400).json({
           success: false,
           error: `Invalid status transition: Cannot change status from '${currentStatus}' to '${newStatus}'`,
           details: {
             currentStatus,
             attemptedStatus: newStatus,
-            allowedTransitions: getValidTransitions(currentStatus),
+            allowedTransitions: allowedStatuses,
           },
         });
+      }
+
+      // Track previous status when archiving
+      if (newStatus === "archived" && currentStatus !== "archived") {
+        propertyData.previousStatus = currentStatus;
+      }
+      // Clear previous status when unarchiving
+      else if (currentStatus === "archived" && newStatus !== "archived") {
+        propertyData.previousStatus = undefined;
       }
     }
 
     const updateData = {
       ...propertyData,
       updatedBy: req.user.id,
+      // updatedAt will be set automatically by the pre-save hook
     };
 
-    // Handle image updates
+    // Handle approval status based on status changes and user role
+    if (propertyData.status !== undefined) {
+      const currentStatus = existingProperty.status;
+      const newStatus = propertyData.status;
+
+      // If changing FROM draft TO non-draft: needs approval (or auto-approve for SuperAdmin)
+      if (currentStatus === "draft" && newStatus !== "draft") {
+        if (req.user.role === "SuperAdmin") {
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateData.approvedBy = req.user.id; // Set who approved it
+          updateData.approvedAt = new Date(); // Set when it was approved
+        } else {
+          updateData.approvalStatus = "pending";
+        }
+        updateData.rejectionReason = null; // Clear any previous rejection reason
+      }
+      // If changing FROM non-draft TO draft: remove from approval workflow
+      else if (currentStatus !== "draft" && newStatus === "draft") {
+        updateData.approvalStatus = "not_applicable";
+        updateData.rejectionReason = null; // Clear any previous rejection reason
+      }
+      // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
+      else if (currentStatus !== "draft" && newStatus !== "draft") {
+        // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
+        if (req.user.role === "admin") {
+          updateData.approvalStatus = "pending";
+          updateData.rejectionReason = null; // Clear any previous rejection reason
+        } else if (req.user.role === "SuperAdmin") {
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateData.approvedBy = req.user.id; // Set who approved it
+          updateData.approvedAt = new Date(); // Set when it was approved
+          updateData.rejectionReason = null; // Clear any previous rejection reason
+        }
+      }
+      // If staying draft: keep current approval status (should be "not_applicable")
+    } else {
+      // If no status change but other property changes and not draft: reset to pending for admin (or auto-approve for SuperAdmin)
+      if (existingProperty.status !== "draft") {
+        if (req.user.role === "admin") {
+          updateData.approvalStatus = "pending";
+          updateData.rejectionReason = null; // Clear any previous rejection reason
+        } else if (req.user.role === "SuperAdmin") {
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateData.approvedBy = req.user.id; // Set who approved it
+          updateData.approvedAt = new Date(); // Set when it was approved
+          updateData.rejectionReason = null; // Clear any previous rejection reason
+        }
+      }
+    }
+
+    // Handle image updates (same approach as createProperty)
+    let finalImages = [];
+    let imageUpdateRequested = false;
+
+    // Handle existing images that should be kept
+    if (propertyData.existingImages !== undefined) {
+      imageUpdateRequested = true;
+      try {
+        const existingImages = JSON.parse(propertyData.existingImages);
+        if (Array.isArray(existingImages)) {
+          finalImages = [...existingImages];
+          console.log(`📷 Keeping ${existingImages.length} existing images`);
+        }
+      } catch (error) {
+        console.error("❌ Error parsing existingImages:", error);
+      }
+    }
+
+    // Handle new uploaded images
     if (req.uploadedImages && req.uploadedImages.length > 0) {
-      // If new images are uploaded, add them to existing images
+      imageUpdateRequested = true;
+      console.log(`📷 Adding ${req.uploadedImages.length} new images`);
+
       const newImages = req.uploadedImages.map((image, index) => {
+        // Get metadata from imageMetadata if available
+        const metadata =
+          req.imageMetadata && req.imageMetadata[index]
+            ? req.imageMetadata[index]
+            : {};
+
         return {
-          url: image.url, // Use large image as main URL
+          url: image.url,
           publicId: image.publicId,
-          altText: `Property image ${
-            existingProperty.images.length + index + 1
-          }`,
-          order: existingProperty.images.length + index,
-          isMain: existingProperty.images.length === 0 && index === 0, // First image is main if no existing images
+          altText:
+            metadata.altText ||
+            `Property image ${finalImages.length + index + 1}`,
+          order: finalImages.length + index,
+          isMain: metadata.isMain === "true" || metadata.isMain === true,
           originalName: image.originalName,
           size: image.size,
           format: image.format,
+          width: image.width,
+          height: image.height,
         };
       });
 
-      updateData.images = [...existingProperty.images, ...newImages];
-    } else if (propertyData.images !== undefined) {
-      // If images array is provided in request body (for reordering/removing existing images)
-      // This handles cases where frontend sends updated images array without new file uploads
-      updateData.images = propertyData.images;
+      finalImages = [...finalImages, ...newImages];
+    }
+
+    // Process images if any image update was requested
+    if (imageUpdateRequested) {
+      // Find images that were removed and delete them from local storage
+      const currentImageIds = existingProperty.images.map(
+        (img) => img.publicId
+      );
+      const finalImageIds = finalImages.map((img) => img.publicId);
+      const removedImageIds = currentImageIds.filter(
+        (id) => !finalImageIds.includes(id)
+      );
+
+      if (removedImageIds.length > 0) {
+        console.log(
+          `🗑️ UPDATE DEBUG - Found ${removedImageIds.length} images to delete:`,
+          removedImageIds
+        );
+
+        // Delete removed images from local storage
+        const deletePromises = removedImageIds.map(async (publicId) => {
+          try {
+            await deleteLocalImageFiles(publicId);
+            console.log(
+              `✅ Successfully deleted local files for removed image: ${publicId}`
+            );
+          } catch (error) {
+            console.error(
+              `❌ Failed to delete local files for image ${publicId}:`,
+              error
+            );
+            // Continue with update even if image deletion fails
+          }
+        });
+
+        await Promise.allSettled(deletePromises);
+      }
+
+      // Ensure only one image is marked as main
+      if (finalImages.length > 0) {
+        const mainImages = finalImages.filter((img) => img.isMain);
+        if (mainImages.length > 1) {
+          // If multiple images are marked as main, keep only the first one
+          let foundMain = false;
+          finalImages = finalImages.map((img) => {
+            if (img.isMain && !foundMain) {
+              foundMain = true;
+              return img;
+            } else if (img.isMain && foundMain) {
+              return { ...img, isMain: false };
+            }
+            return img;
+          });
+        } else if (mainImages.length === 0) {
+          // If no image is marked as main, mark the first one as main
+          finalImages[0].isMain = true;
+        }
+
+        // Update order to be sequential
+        finalImages = finalImages.map((img, index) => ({
+          ...img,
+          order: index,
+        }));
+      }
+
+      // Validate that at least one image remains after update
+      if (finalImages.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "At least one image is required",
+          details: [
+            {
+              field: "images",
+              message: "At least one image is required",
+            },
+          ],
+        });
+      }
+
+      updateData.images = finalImages;
+      console.log(
+        `📷 Image update requested - Final images count: ${finalImages.length}`
+      );
+    } else {
+      // If no image data is provided at all, keep existing images unchanged
+      console.log("📷 No image changes requested, keeping existing images");
     }
 
     // Update the existing property object and save it to trigger pre-save hooks
@@ -595,6 +976,39 @@ const updateProperty = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating property:", error);
+
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+
+      // Provide user-friendly error messages
+      let userFriendlyField = field;
+      let userFriendlyMessage = `${
+        field.charAt(0).toUpperCase() + field.slice(1)
+      } already exists`;
+
+      if (field === "slug") {
+        userFriendlyField = "title"; // Map slug errors to title field for frontend
+        userFriendlyMessage =
+          "A property with this title already exists. Please choose a different title.";
+      }
+
+      const errorResponse = {
+        success: false,
+        error: `Property with this ${
+          field === "slug" ? "title" : field
+        } already exists`,
+        details: [
+          {
+            field: userFriendlyField,
+            message: userFriendlyMessage,
+          },
+        ],
+      };
+
+      return res.status(400).json(errorResponse);
+    }
 
     if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err) => err.message);
@@ -640,10 +1054,32 @@ const deleteProperty = async (req, res) => {
     // Check ownership for admin users (SuperAdmin can delete any property)
     if (req.requireOwnership && req.userRole === "admin") {
       const ownerId = property.createdBy?.toString();
-      if (ownerId !== req.user.id) {
+      if (ownerId !== req.user.id.toString()) {
         return res.status(403).json({
           success: false,
           error: "Access denied - You can only delete properties you created",
+        });
+      }
+
+      // Admin can only delete rejected or draft properties
+      const canDelete =
+        property.approvalStatus === "rejected" || property.status === "draft";
+      if (!canDelete) {
+        return res.status(403).json({
+          success: false,
+          error: `Cannot delete property. Only rejected or draft properties can be deleted by admin.`,
+          details: {
+            currentStatus: property.status,
+            currentApprovalStatus: property.approvalStatus,
+            allowedConditions:
+              "status = 'draft' OR approvalStatus = 'rejected'",
+            message:
+              property.approvalStatus === "pending"
+                ? "Property is awaiting SuperAdmin approval"
+                : property.approvalStatus === "approved"
+                ? "Property has been approved and cannot be deleted"
+                : "Property is not in a deletable state",
+          },
         });
       }
     }

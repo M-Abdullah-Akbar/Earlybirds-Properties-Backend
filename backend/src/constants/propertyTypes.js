@@ -37,6 +37,14 @@ const PROPERTY_STATUS = [
   "archived",
 ];
 
+// Property approval statuses (separate from listing status)
+const APPROVAL_STATUS = [
+  "pending", // Awaiting SuperAdmin approval
+  "approved", // Approved by SuperAdmin - can be published
+  "rejected", // Rejected by SuperAdmin - admin can edit/delete
+  "not_applicable", // For draft properties - not in approval workflow
+];
+
 const AREA_UNITS = ["sqft", "sqm"];
 
 const PARKING_TYPES = ["covered", "open", "garage", "street"];
@@ -463,6 +471,7 @@ module.exports = {
   EMIRATES,
   LISTING_TYPES,
   PROPERTY_STATUS,
+  APPROVAL_STATUS,
   AREA_UNITS,
   PARKING_TYPES,
   PRICE_TYPES,

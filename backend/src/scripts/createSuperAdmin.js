@@ -41,7 +41,6 @@ const createSuperAdmin = async () => {
     const superAdmin = new User(superAdminData);
     await superAdmin.save();
 
-    console.log("✅ SuperAdmin created successfully!");
     console.log(`Username: ${superAdminData.username}`);
     console.log(`Email: ${superAdminData.email}`);
     console.log(`Name: ${superAdminData.name}`);

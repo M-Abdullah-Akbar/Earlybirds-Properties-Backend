@@ -3,6 +3,7 @@ const {
   EMIRATES,
   LISTING_TYPES,
   PROPERTY_STATUS,
+  APPROVAL_STATUS,
   AREA_UNITS,
   PARKING_TYPES,
   PRICE_TYPES,
@@ -184,6 +185,11 @@ const propertySchema = new mongoose.Schema(
       enum: PROPERTY_STATUS,
       default: PROPERTY_STATUS[0],
     },
+    previousStatus: {
+      type: String,
+      enum: PROPERTY_STATUS,
+      required: false,
+    },
     listingType: {
       type: String,
       enum: LISTING_TYPES,
@@ -194,13 +200,39 @@ const propertySchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // Manual timestamp management (similar to approval system)
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    updatedAt: {
+      type: Date,
+    },
+    // Approval system fields
+    approvalStatus: {
+      type: String,
+      enum: APPROVAL_STATUS,
+      default: "not_applicable", // Default for drafts, controller will set appropriately
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", // SuperAdmin who approved/rejected
+    },
+    approvedAt: {
+      type: Date,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
   },
   {
-    timestamps: true,
+    timestamps: false, // Disable automatic timestamps, we'll manage them manually
   }
 );
 
@@ -215,6 +247,8 @@ propertySchema.index({ "details.bedrooms": 1 });
 propertySchema.index({ "details.area": 1 });
 propertySchema.index({ featured: 1 });
 propertySchema.index({ createdAt: -1 });
+propertySchema.index({ approvalStatus: 1 });
+propertySchema.index({ createdBy: 1, approvalStatus: 1 });
 
 // Text search index
 propertySchema.index({
@@ -260,6 +294,21 @@ propertySchema.pre("save", function (next) {
       });
     }
   }
+  next();
+});
+
+// Manage timestamps manually - prevent updatedAt during creation
+propertySchema.pre("save", function (next) {
+  // If this is a new document (creation), don't set updatedAt or updatedBy
+  if (this.isNew) {
+    this.updatedAt = undefined;
+    this.updatedBy = undefined;
+  }
+  // If this is an update and updatedAt is not already set, set it now
+  else if (!this.updatedAt) {
+    this.updatedAt = new Date();
+  }
+
   next();
 });
 

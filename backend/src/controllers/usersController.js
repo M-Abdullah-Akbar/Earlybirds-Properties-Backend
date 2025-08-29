@@ -4,6 +4,7 @@
  */
 
 const User = require("../models/User");
+const Property = require("../models/Property");
 
 /**
  * Get user statistics
@@ -20,18 +21,12 @@ const getUserStats = async (req, res) => {
       });
     }
 
-    const totalUsers = await User.countDocuments();
-    const adminCount = await User.countDocuments({ role: "admin" });
-    const superAdminCount = await User.countDocuments({ role: "SuperAdmin" });
-    const activeUsers = await User.countDocuments({ isActive: true });
-    const inactiveUsers = await User.countDocuments({ isActive: false });
-
-    // Recent users (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentUsers = await User.countDocuments({
-      createdAt: { $gte: thirtyDaysAgo },
-    });
+    // Get only the stats that are used in the frontend
+    const [totalUsers, superAdminCount, activeUsers] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ role: "SuperAdmin" }),
+      User.countDocuments({ isActive: true }),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -39,13 +34,10 @@ const getUserStats = async (req, res) => {
         total: totalUsers,
         byRole: {
           SuperAdmin: superAdminCount,
-          admin: adminCount,
         },
         byStatus: {
           active: activeUsers,
-          inactive: inactiveUsers,
         },
-        recent: recentUsers,
       },
     });
   } catch (error) {
@@ -72,21 +64,12 @@ const getUsers = async (req, res) => {
       });
     }
 
-    const {
-      page = 1,
-      limit = 10,
-      role,
-      isActive,
-      search,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = req.query;
+    const { page = 1, limit = 10, isActive, search } = req.query;
 
     // Start with ACL query filters (SuperAdmin can see all)
     const filter = { ...req.queryFilters } || {};
 
     // Apply additional filters
-    if (role) filter.role = role;
     if (isActive !== undefined) filter.isActive = isActive === "true";
 
     // Search functionality
@@ -94,20 +77,18 @@ const getUsers = async (req, res) => {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
-        { username: { $regex: search, $options: "i" } },
       ];
     }
 
-    // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+    // Use default sort (createdAt desc) since frontend doesn't provide sorting options
+    const sort = { createdAt: -1 };
 
     // Execute query with pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [users, total] = await Promise.all([
       User.find(filter)
-        .select("-password") // Exclude password field
+        .select("_id name email username role isActive createdAt lastLogin") // Only select fields used in frontend
         .sort(sort)
         .skip(skip)
         .limit(parseInt(limit)),
@@ -124,8 +105,6 @@ const getUsers = async (req, res) => {
           total,
           limit: parseInt(limit),
         },
-        // Include filter info for debugging (SuperAdmin only)
-        appliedFilters: filter,
       },
     });
   } catch (error) {
@@ -146,7 +125,9 @@ const getUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id).select("-password");
+    const user = await User.findById(id).select(
+      "_id name email username role isActive createdAt lastLogin"
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -184,24 +165,13 @@ const createUser = async (req, res) => {
     }
 
     const { username, email, password, name, role = "admin" } = req.body;
+    // Note: confirmPassword is used only for validation, not stored in database
 
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }],
-    });
-
-    if (existingUser) {
+    // Only allow creating admin and SuperAdmin users
+    if (role !== "admin" && role !== "SuperAdmin") {
       return res.status(400).json({
         success: false,
-        error: "User with this email or username already exists",
-      });
-    }
-
-    // Only allow creating admin users (SuperAdmin creates other admins)
-    if (role !== "admin") {
-      return res.status(400).json({
-        success: false,
-        error: "Can only create admin users",
+        error: "Can only create admin or SuperAdmin users",
       });
     }
 
@@ -216,19 +186,39 @@ const createUser = async (req, res) => {
       createdBy: req.user.id,
     });
 
-    await user.save();
+    // Save without updating the updatedAt timestamp
+    await user.save({ timestamps: { updatedAt: false } });
 
-    // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    // Get user with only necessary fields for response
+    const userResponse = await User.findById(user._id).select(
+      "_id name email username role isActive createdAt lastLogin"
+    );
 
     res.status(201).json({
       success: true,
       data: { user: userResponse },
-      message: "Admin user created successfully",
+      message: `${role} user created successfully`,
     });
   } catch (error) {
     console.error("Error creating user:", error);
+
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+      return res.status(400).json({
+        success: false,
+        error: `User with this ${field} already exists`,
+        details: [
+          {
+            field: field,
+            message: `${
+              field.charAt(0).toUpperCase() + field.slice(1)
+            } already exists`,
+          },
+        ],
+      });
+    }
 
     // Handle validation errors
     if (error.name === "ValidationError") {
@@ -248,14 +238,14 @@ const createUser = async (req, res) => {
 };
 
 /**
- * Update user
+ * Update user profile (basic fields only)
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { password, role, ...updateData } = req.body;
+    const updateData = req.body; // Only contains name, username, email
 
     // Find user
     const user = await User.findById(id);
@@ -266,70 +256,58 @@ const updateUser = async (req, res) => {
       });
     }
 
-    // Handle different update scenarios
-    if (req.userRole === "admin") {
-      // Admin can only update their own profile
-      if (id !== req.user.id.toString()) {
-        return res.status(403).json({
-          success: false,
-          error: "Access denied - You can only update your own profile",
-        });
-      }
-
-      // Admin cannot change their own role
-      if (role) {
-        return res.status(403).json({
-          success: false,
-          error: "You cannot change your own role",
-        });
-      }
-    } else if (req.userRole === "SuperAdmin") {
-      // Check if trying to update another SuperAdmin
-      if (user.role === "SuperAdmin" && id !== req.user.id.toString()) {
-        return res.status(403).json({
-          success: false,
-          error: "Cannot modify other SuperAdmin users",
-        });
-      }
-
-      // SuperAdmin cannot change their own role or any SuperAdmin role
-      if (user.role === "SuperAdmin" && role) {
-        return res.status(403).json({
-          success: false,
-          error: "Cannot change SuperAdmin role",
-        });
-      }
-
-      // For admin users, handle role update (only allow admin role)
-      if (user.role === "admin" && role && role !== "admin") {
-        return res.status(400).json({
-          success: false,
-          error: "Can only set role to admin",
-        });
-      }
-      if (user.role === "admin" && role) updateData.role = role;
+    // Users can only update their own profile
+    if (id !== req.user.id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: "Access denied - You can only update your own profile",
+      });
     }
 
-    // Handle password update (let User model's pre('save') middleware handle hashing)
-    if (password) {
-      updateData.password = password; // Don't hash here - let the model handle it
-    }
+    // Update user with only allowed profile fields (whitelist approach)
+    const allowedFields = ["name", "username", "email"];
+    const filteredUpdateData = {};
 
-    // Update user - use save() to trigger pre('save') middleware for password hashing
-    Object.assign(user, updateData);
+    allowedFields.forEach((field) => {
+      if (updateData[field] !== undefined) {
+        filteredUpdateData[field] = updateData[field];
+      }
+    });
+
+    Object.assign(user, filteredUpdateData);
     user.updatedAt = new Date();
     await user.save();
 
-    // Get updated user without password
-    const updatedUser = await User.findById(id).select("-password");
+    // Get updated user with only necessary fields for response
+    const updatedUser = await User.findById(id).select(
+      "_id name email username role isActive"
+    );
 
     res.status(200).json({
       success: true,
       data: { user: updatedUser },
-      message: "User updated successfully",
+      message: "Profile updated successfully",
     });
   } catch (error) {
-    console.error("Error updating user:", error);
+    console.error("Error updating user profile:", error);
+
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+      return res.status(400).json({
+        success: false,
+        error: `User with this ${field} already exists`,
+        details: [
+          {
+            field: field,
+            message: `${
+              field.charAt(0).toUpperCase() + field.slice(1)
+            } already exists`,
+          },
+        ],
+      });
+    }
 
     if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err) => err.message);
@@ -342,7 +320,100 @@ const updateUser = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: "Failed to update user",
+      error: "Failed to update profile",
+    });
+  }
+};
+
+/**
+ * Transfer property ownership (SuperAdmin only)
+ * @route PATCH /api/users/:id/transfer-properties
+ * @access SuperAdmin only
+ */
+const transferPropertyOwnership = async (req, res) => {
+  try {
+    const { id } = req.params; // Current owner ID
+    const { newOwnerId, propertyIds } = req.body; // New owner ID and optional specific property IDs
+
+    // Only SuperAdmin can transfer property ownership
+    if (req.userRole !== "SuperAdmin") {
+      return res.status(403).json({
+        success: false,
+        error:
+          "Access denied - Only SuperAdmin can transfer property ownership",
+      });
+    }
+
+    // Validate new owner
+    const newOwner = await User.findById(newOwnerId);
+    if (!newOwner) {
+      return res.status(404).json({
+        success: false,
+        error: "New owner not found",
+      });
+    }
+
+    // Validate current owner
+    const currentOwner = await User.findById(id);
+    if (!currentOwner) {
+      return res.status(404).json({
+        success: false,
+        error: "Current owner not found",
+      });
+    }
+
+    // Build query for properties to transfer
+    let propertyQuery = { createdBy: id };
+
+    // If specific property IDs are provided, only transfer those
+    if (propertyIds && Array.isArray(propertyIds) && propertyIds.length > 0) {
+      propertyQuery._id = { $in: propertyIds };
+    } else {
+      // Transfer only approved and pending properties (not rejected ones)
+      propertyQuery.approvalStatus = { $in: ["approved", "pending"] };
+    }
+
+    // Get properties to be transferred
+    const propertiesToTransfer = await Property.find(propertyQuery);
+
+    if (propertiesToTransfer.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "No properties found to transfer",
+      });
+    }
+
+    // Transfer ownership
+    const transferResult = await Property.updateMany(propertyQuery, {
+      $set: {
+        createdBy: newOwnerId,
+        updatedBy: req.user.id,
+        updatedAt: new Date(),
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully transferred ${transferResult.modifiedCount} property(ies) from ${currentOwner.name} to ${newOwner.name}`,
+      data: {
+        transferredCount: transferResult.modifiedCount,
+        fromUser: {
+          id: currentOwner._id,
+          name: currentOwner.name,
+          email: currentOwner.email,
+        },
+        toUser: {
+          id: newOwner._id,
+          name: newOwner.name,
+          email: newOwner.email,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error transferring property ownership:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to transfer property ownership",
     });
   }
 };
@@ -390,9 +461,32 @@ const deleteUser = async (req, res) => {
           error: "SuperAdmin cannot delete their own account",
         });
       }
+
+      // Check if user has approved or pending properties
+      const userProperties = await Property.find({
+        createdBy: id,
+        approvalStatus: { $in: ["approved", "pending"] },
+      });
+
+      if (userProperties.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Cannot delete user with approved or pending properties",
+          details: {
+            propertyCount: userProperties.length,
+            message:
+              "Please transfer property ownership before deleting this user",
+            properties: userProperties.map((p) => ({
+              id: p._id,
+              title: p.title,
+              approvalStatus: p.approvalStatus,
+            })),
+          },
+        });
+      }
     }
 
-    // Delete user
+    // Delete user (only rejected properties will remain, which is acceptable)
     await User.findByIdAndDelete(id);
 
     res.status(200).json({
@@ -408,11 +502,88 @@ const deleteUser = async (req, res) => {
   }
 };
 
+/**
+ * Update user status (active/inactive) - SuperAdmin only
+ * @route PATCH /api/users/:id/status
+ * @access SuperAdmin only
+ */
+const updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    // Validate isActive field
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        error: "isActive field must be a boolean value",
+      });
+    }
+
+    // Find user
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    // Only SuperAdmin can update user status
+    if (req.userRole !== "SuperAdmin") {
+      return res.status(403).json({
+        success: false,
+        error: "Access denied - Only SuperAdmin can update user status",
+      });
+    }
+
+    // SuperAdmin cannot change their own status
+    if (user._id.toString() === req.user.id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: "SuperAdmin cannot change their own status",
+      });
+    }
+
+    // SuperAdmin cannot change other SuperAdmin status
+    if (user.role === "SuperAdmin") {
+      return res.status(403).json({
+        success: false,
+        error: "Cannot change status of other SuperAdmin users",
+      });
+    }
+
+    // Update only the isActive field
+    user.isActive = isActive;
+    user.updatedAt = new Date();
+    await user.save();
+
+    // Get updated user with only necessary fields
+    const updatedUser = await User.findById(id).select(
+      "_id name email username role isActive createdAt lastLogin"
+    );
+
+    res.status(200).json({
+      success: true,
+      data: { user: updatedUser },
+      message: `User ${isActive ? "activated" : "deactivated"} successfully`,
+    });
+  } catch (error) {
+    console.error("Error updating user status:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to update user status",
+    });
+  }
+};
+
 module.exports = {
   getUserStats,
   getUsers,
   getUser,
   createUser,
   updateUser,
+  updateUserStatus,
   deleteUser,
+  transferPropertyOwnership,
 };

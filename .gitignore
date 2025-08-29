@@ -38,3 +38,4 @@ Thumbs.db
 
 # Development tools
 .zencoder/
+node_modules

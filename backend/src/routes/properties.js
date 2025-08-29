@@ -19,14 +19,19 @@ const optionalAuth = require("../middleware/optionalAuth");
 const { checkPermission } = require("../middleware/acl");
 const {
   handlePropertyImageUpload,
+  handleSmartCompressedImageUpload,
   optionalImages,
+  parseMultipartData,
+  processValidatedImages,
 } = require("../middleware/imageUpload");
 const {
   createPropertyWithImagesValidation,
   updatePropertyValidation,
   propertyQueryValidation,
   singlePropertyValidation,
+  parseFormDataOnly,
   parsePropertyDataFromFormData,
+  parseEnhancedFormData,
 } = require("../middleware/validation");
 
 /**
@@ -88,15 +93,18 @@ router.get(
 );
 
 /**
- * @route   POST /api/properties/with-images
- * @desc    Create property with pre-uploaded image data (for testing/admin)
+ * @route   POST /api/properties
+ * @desc    Create property with file uploads (handles both form data and images)
  * @access  Admin only
  */
 router.post(
-  "/with-images",
+  "/",
   auth,
   checkPermission("properties", "Create"),
+  parseMultipartData,
+  parseEnhancedFormData,
   createPropertyWithImagesValidation,
+  processValidatedImages,
   createPropertyWithImages
 );
 
@@ -115,16 +123,16 @@ router
   )
   /**
    * @route   PUT /api/properties/:id
-   * @desc    Update property (images optional)
+   * @desc    Update property (handles both form data and images, same as create)
    * @access  Admin only
    */
   .put(
     auth,
     checkPermission("properties", "Update"),
-    handlePropertyImageUpload,
-    optionalImages,
-    parsePropertyDataFromFormData,
+    parseMultipartData,
+    parseEnhancedFormData,
     updatePropertyValidation,
+    processValidatedImages,
     updateProperty
   )
   /**

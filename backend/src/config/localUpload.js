@@ -28,11 +28,6 @@ class SmartCompressionStorage {
       (process.env.BASE_URL
         ? `${process.env.BASE_URL}/uploads`
         : "http://localhost:8000/uploads");
-
-    console.log("🔧 SmartCompressionStorage configured:");
-    console.log("   destination:", this.destination);
-    console.log("   folderName:", this.folderName);
-    console.log("   baseUrl:", this.baseUrl);
   }
 
   async _ensureDirectoryExists(dirPath) {
@@ -41,7 +36,6 @@ class SmartCompressionStorage {
     } catch (error) {
       // Directory doesn't exist, create it
       await fs.mkdir(dirPath, { recursive: true });
-      console.log(`📁 Created directory: ${dirPath}`);
     }
   }
 
@@ -54,21 +48,8 @@ class SmartCompressionStorage {
     const compressionRatio = targetSize / fileSize;
     const megapixels = pixelCount / (1024 * 1024);
 
-    console.log(
-      `🧮 Prediction inputs: ${Math.round(
-        fileSize / 1024
-      )}KB → 100KB (${Math.round(compressionRatio * 100)}% compression), ${
-        Math.round(megapixels * 10) / 10
-      }MP`
-    );
-
     // For extreme compression ratios (>90% reduction needed), start very low
     if (compressionRatio < 0.1) {
-      console.log(
-        `🎯 Extreme compression needed (${Math.round(
-          (1 - compressionRatio) * 100
-        )}% reduction) → Starting at 1% quality`
-      );
       return 1;
     }
 
@@ -107,14 +88,11 @@ class SmartCompressionStorage {
 
     // Standard prediction for smaller files
     const baseQuality = Math.max(1, Math.round(compressionRatio * 100 * 0.8));
-    console.log(`📊 Standard prediction → Quality ${baseQuality}%`);
 
     return baseQuality;
   }
 
   _handleFile(req, file, cb) {
-    console.log("🔍 SmartCompressionStorage processing:", file.originalname);
-
     // Collect file data
     const chunks = [];
 
@@ -163,8 +141,6 @@ class SmartCompressionStorage {
         let finalQuality = 100;
 
         if (originalSize > targetSizeBytes) {
-          console.log(`🔧 File > 100KB, applying hybrid compression...`);
-
           console.log(
             `🎯 Starting hybrid compression: target ≤${targetSizeKB}KB`
           );
@@ -180,8 +156,6 @@ class SmartCompressionStorage {
             targetSizeBytes
           );
 
-          console.log(`🧠 Predicted optimal quality: ${predictedQuality}%`);
-
           // Step 2: Test the prediction
           attempts++;
           processedBuffer = await processImage(originalBuffer, {
@@ -191,12 +165,6 @@ class SmartCompressionStorage {
 
           finalSize = processedBuffer.length;
           finalQuality = predictedQuality;
-
-          console.log(
-            `🎯 Attempt ${attempts}: Quality ${predictedQuality}% → ${Math.round(
-              finalSize / 1024
-            )}KB`
-          );
 
           // Step 3: Fine-tuning loop - maximum 2 attempts since prediction is now accurate
           while (
@@ -333,8 +301,6 @@ class SmartCompressionStorage {
         // Generate URL
         const imageUrl = `${this.baseUrl}/${relativePath}`;
 
-        console.log(`✅ Image saved: ${imageUrl} (${finalSize} bytes)`);
-
         // Calculate compression ratio
         const compressionRatio = Math.round(
           (1 - finalSize / originalSize) * 100
@@ -387,7 +353,6 @@ class SmartCompressionStorage {
     if (file.path) {
       fs.unlink(file.path)
         .then(() => {
-          console.log(`🗑️ Deleted local file: ${file.path}`);
           cb(null);
         })
         .catch((error) => {
@@ -425,10 +390,8 @@ const uploadSmartCompressedImages = multer({
 
     // Check file type
     if (file.mimetype.startsWith("image/")) {
-      console.log("✅ File accepted by filter");
       cb(null, true);
     } else {
-      console.log("❌ File rejected by filter");
       cb(new Error("Only image files are allowed!"), false);
     }
   },

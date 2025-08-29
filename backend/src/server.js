@@ -11,6 +11,7 @@ const { connectDB } = require("./config/database.js");
 // Import routes
 const authRoutes = require("./routes/auth");
 const propertyRoutes = require("./routes/properties");
+const propertyApprovalRoutes = require("./routes/propertyApproval");
 const uploadRoutes = require("./routes/upload");
 const userRoutes = require("./routes/users");
 const emailRoutes = require("./routes/email");
@@ -28,8 +29,6 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
 ].filter(Boolean); // Remove any undefined values
-
-console.log("🔧 CORS: Allowed origins:", allowedOrigins);
 
 app.use(
   cors({
@@ -60,6 +59,16 @@ app.use(compression());
 // Serve static files from uploads directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(
+    `🌐 Incoming request: ${req.method} ${
+      req.originalUrl
+    } - ${new Date().toISOString()}`
+  );
+  next();
+});
+
 // API Routes
 app.get("/api", (req, res) => {
   res.status(200).json({
@@ -76,6 +85,7 @@ app.get("/api", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
+app.use("/api/property-approval", propertyApprovalRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/email", emailRoutes);
