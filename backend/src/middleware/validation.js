@@ -405,6 +405,11 @@ const validateCreateProperty = [
   }),
 
   body("price").custom((price, { req }) => {
+    // Skip price validation for "off plan" listing type
+    if (req.body.listingType === "off plan") {
+      return true;
+    }
+
     // Check if price is required (null, undefined, empty string, or string "NaN")
     if (
       price === null ||
@@ -1040,6 +1045,11 @@ const validateUpdateProperty = [
   }),
 
   body("price").custom((price, { req }) => {
+    // Skip price validation for "off plan" listing type
+    if (req.body.listingType === "off plan") {
+      return true;
+    }
+
     // Check if price is required (empty string check)
     if (price === null) {
       throw new Error("Price is required");
@@ -2477,8 +2487,8 @@ const validateUserQuery = [
   query("limit").custom((limit) => {
     if (limit !== undefined) {
       const limitNum = parseInt(limit);
-      if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
-        throw new Error("Limit must be between 1 and 100");
+      if (isNaN(limitNum) || limitNum < 1 || limitNum > 10) {
+        throw new Error("Limit must be between 1 and 10");
       }
     }
     return true;

@@ -102,9 +102,8 @@ const approveProperty = async (req, res) => {
 
     // Update property approval status
     property.approvalStatus = "approved";
-    property.approvedBy = req.user.id;
-    property.approvedAt = new Date();
     property.updatedBy = req.user.id;
+    property.updatedAt = new Date();
 
     // Clear any previous rejection reason
     property.rejectionReason = undefined;
@@ -119,7 +118,8 @@ const approveProperty = async (req, res) => {
           id: property._id,
           title: property.title,
           approvalStatus: property.approvalStatus,
-          approvedAt: property.approvedAt,
+          updatedAt: property.updatedAt,
+          updatedBy: property.updatedBy,
           createdBy: property.createdBy,
         },
       },
@@ -174,10 +174,9 @@ const rejectProperty = async (req, res) => {
 
     // Update property approval status
     property.approvalStatus = "rejected";
-    property.approvedBy = req.user.id;
-    property.approvedAt = new Date();
-    property.rejectionReason = rejectionReason.trim();
     property.updatedBy = req.user.id;
+    property.updatedAt = new Date();
+    property.rejectionReason = rejectionReason.trim();
 
     await property.save();
 
@@ -190,7 +189,8 @@ const rejectProperty = async (req, res) => {
           title: property.title,
           approvalStatus: property.approvalStatus,
           rejectionReason: property.rejectionReason,
-          approvedAt: property.approvedAt,
+          updatedAt: property.updatedAt,
+          updatedBy: property.updatedBy,
           createdBy: property.createdBy,
         },
       },
@@ -236,15 +236,15 @@ const getApprovalStats = async (req, res) => {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const recentActivity = await Property.find({
-      approvedAt: { $gte: thirtyDaysAgo },
+      updatedAt: { $gte: thirtyDaysAgo },
       approvalStatus: { $in: ["approved", "rejected"] },
     })
       .populate("createdBy", "name")
-      .populate("approvedBy", "name")
-      .sort({ approvedAt: -1 })
+      .populate("updatedBy", "name")
+      .sort({ updatedAt: -1 })
       .limit(10)
       .select(
-        "title approvalStatus approvedAt rejectionReason createdBy approvedBy"
+        "title approvalStatus updatedAt rejectionReason createdBy updatedBy"
       );
 
     res.status(200).json({

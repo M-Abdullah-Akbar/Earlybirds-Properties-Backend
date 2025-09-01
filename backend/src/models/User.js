@@ -56,6 +56,11 @@ const userSchema = new mongoose.Schema(
       ref: "User",
       default: null, // SuperAdmin won't have createdBy
     },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null, // Track who last updated this user
+    },
   },
   {
     timestamps: true,

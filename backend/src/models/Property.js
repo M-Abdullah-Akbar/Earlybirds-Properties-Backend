@@ -148,7 +148,10 @@ const propertySchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      required: true,
+      required: function () {
+        // Price is not required for "off plan" listing type
+        return this.listingType !== "off plan";
+      },
     },
     currency: {
       type: String,

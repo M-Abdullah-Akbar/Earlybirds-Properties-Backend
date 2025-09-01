@@ -5,6 +5,84 @@
 
 const User = require("../models/User");
 const Property = require("../models/Property");
+const fs = require("fs").promises;
+const path = require("path");
+
+/**
+ * Helper function to delete local image files
+ * @param {string} publicId - The public ID of the image (filename without extension)
+ */
+const deleteLocalImageFiles = async (publicId) => {
+  try {
+    // Determine upload directory based on environment
+    const uploadDir =
+      process.env.NODE_ENV === "production"
+        ? path.join(__dirname, "uploads") // dist/uploads
+        : path.join(__dirname, "../uploads"); // backend/src/uploads
+
+    console.log(
+      `🗑️ DELETE DEBUG - Attempting to delete files for publicId: ${publicId}`
+    );
+    console.log(`🗑️ DELETE DEBUG - Upload directory: ${uploadDir}`);
+
+    // Extract base filename without extension if publicId already includes extension
+    let baseFilename = publicId;
+    const knownExtensions = [".webp", ".jpg", ".jpeg", ".png"];
+    const hasExtension = knownExtensions.some((ext) =>
+      publicId.toLowerCase().endsWith(ext)
+    );
+
+    if (hasExtension) {
+      // Remove extension to get base filename
+      const lastDotIndex = publicId.lastIndexOf(".");
+      baseFilename = publicId.substring(0, lastDotIndex);
+      console.log(
+        `🗑️ DELETE DEBUG - PublicId has extension, using base: ${baseFilename}`
+      );
+    }
+
+    // List of possible file extensions and sizes
+    const possibleFiles = [
+      `${baseFilename}.webp`,
+      `${baseFilename}_thumb.webp`,
+      `${baseFilename}.jpg`,
+      `${baseFilename}_thumb.jpg`,
+      `${baseFilename}.jpeg`,
+      `${baseFilename}_thumb.jpeg`,
+      `${baseFilename}.png`,
+      `${baseFilename}_thumb.png`,
+    ];
+
+    console.log(
+      `🗑️ DELETE DEBUG - Checking for files: ${possibleFiles.join(", ")}`
+    );
+
+    let deletedCount = 0;
+    const deletePromises = possibleFiles.map(async (filename) => {
+      const filePath = path.join(uploadDir, filename);
+      try {
+        await fs.access(filePath);
+        await fs.unlink(filePath);
+        console.log(`🗑️ DELETE SUCCESS - Deleted: ${filename}`);
+        deletedCount++;
+      } catch (error) {
+        // File doesn't exist or couldn't be deleted - this is expected for some files
+        console.log(`🗑️ DELETE SKIP - File not found: ${filename}`);
+      }
+    });
+
+    await Promise.all(deletePromises);
+    console.log(
+      `🗑️ DELETE SUMMARY - Deleted ${deletedCount} files for publicId: ${publicId}`
+    );
+  } catch (error) {
+    console.error(
+      `🗑️ DELETE ERROR - Failed to delete files for ${publicId}:`,
+      error
+    );
+    throw error;
+  }
+};
 
 /**
  * Get user statistics
@@ -21,11 +99,11 @@ const getUserStats = async (req, res) => {
       });
     }
 
-    // Get only the stats that are used in the frontend
+    // Get only the stats that are used in the frontend (excluding current SuperAdmin)
     const [totalUsers, superAdminCount, activeUsers] = await Promise.all([
-      User.countDocuments(),
-      User.countDocuments({ role: "SuperAdmin" }),
-      User.countDocuments({ isActive: true }),
+      User.countDocuments({ _id: { $ne: req.user.id } }),
+      User.countDocuments({ role: "SuperAdmin", _id: { $ne: req.user.id } }),
+      User.countDocuments({ isActive: true, _id: { $ne: req.user.id } }),
     ]);
 
     res.status(200).json({
@@ -69,6 +147,9 @@ const getUsers = async (req, res) => {
     // Start with ACL query filters (SuperAdmin can see all)
     const filter = { ...req.queryFilters } || {};
 
+    // Exclude the current SuperAdmin from the list (they can't manage themselves)
+    filter._id = { $ne: req.user.id };
+
     // Apply additional filters
     if (isActive !== undefined) filter.isActive = isActive === "true";
 
@@ -88,7 +169,10 @@ const getUsers = async (req, res) => {
 
     const [users, total] = await Promise.all([
       User.find(filter)
-        .select("_id name email username role isActive createdAt lastLogin") // Only select fields used in frontend
+        .select(
+          "_id name email username role isActive createdAt lastLogin updatedAt updatedBy"
+        ) // Include audit fields
+        .populate("updatedBy", "name username") // Populate updatedBy with user details
         .sort(sort)
         .skip(skip)
         .limit(parseInt(limit)),
@@ -125,9 +209,11 @@ const getUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id).select(
-      "_id name email username role isActive createdAt lastLogin"
-    );
+    const user = await User.findById(id)
+      .select(
+        "_id name email username role isActive createdAt lastLogin updatedAt updatedBy"
+      )
+      .populate("updatedBy", "name username");
 
     if (!user) {
       return res.status(404).json({
@@ -276,12 +362,13 @@ const updateUser = async (req, res) => {
 
     Object.assign(user, filteredUpdateData);
     user.updatedAt = new Date();
+    user.updatedBy = req.user.id; // Track who updated this user
     await user.save();
 
     // Get updated user with only necessary fields for response
-    const updatedUser = await User.findById(id).select(
-      "_id name email username role isActive"
-    );
+    const updatedUser = await User.findById(id)
+      .select("_id name email username role isActive updatedAt updatedBy")
+      .populate("updatedBy", "name username");
 
     res.status(200).json({
       success: true,
@@ -461,37 +548,127 @@ const deleteUser = async (req, res) => {
           error: "SuperAdmin cannot delete their own account",
         });
       }
+    }
 
-      // Check if user has approved or pending properties
-      const userProperties = await Property.find({
+    // Initialize property tracking variables
+    let propertiesToTransfer = [];
+    let propertiesToDelete = [];
+    let totalImagesDeleted = 0;
+
+    // Handle property transfer/deletion for SuperAdmin deletions
+    if (req.userRole === "SuperAdmin") {
+      // Find approved or pending properties that need to be transferred
+      propertiesToTransfer = await Property.find({
         createdBy: id,
         approvalStatus: { $in: ["approved", "pending"] },
       });
 
-      if (userProperties.length > 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Cannot delete user with approved or pending properties",
-          details: {
-            propertyCount: userProperties.length,
-            message:
-              "Please transfer property ownership before deleting this user",
-            properties: userProperties.map((p) => ({
-              id: p._id,
-              title: p.title,
-              approvalStatus: p.approvalStatus,
-            })),
+      // If there are approved/pending properties, transfer them to the SuperAdmin
+      if (propertiesToTransfer.length > 0) {
+        console.log(
+          `Transferring ${propertiesToTransfer.length} approved/pending properties to SuperAdmin`
+        );
+
+        await Property.updateMany(
+          {
+            createdBy: id,
+            approvalStatus: { $in: ["approved", "pending"] },
           },
+          {
+            $set: {
+              createdBy: req.user.id, // Transfer to the SuperAdmin performing the deletion
+              updatedBy: req.user.id,
+              updatedAt: new Date(),
+            },
+          }
+        );
+      }
+
+      // Find draft and rejected properties that will be deleted
+      propertiesToDelete = await Property.find({
+        createdBy: id,
+        approvalStatus: { $in: ["not_applicable", "rejected"] },
+      });
+
+      // Delete draft and rejected properties with image cleanup
+      if (propertiesToDelete.length > 0) {
+        console.log(
+          `Deleting ${propertiesToDelete.length} draft/rejected properties with image cleanup`
+        );
+
+        // Clean up images from local storage before deleting properties
+        for (const property of propertiesToDelete) {
+          if (property.images && property.images.length > 0) {
+            console.log(
+              `🗑️ Cleaning up ${property.images.length} images for property: ${property.title}`
+            );
+
+            const deletePromises = property.images.map((image) =>
+              deleteLocalImageFiles(image.publicId).catch((error) => {
+                console.error(
+                  `Failed to delete image ${image.publicId} for property ${property.title}:`,
+                  error
+                );
+                // Continue with deletion even if image cleanup fails
+              })
+            );
+
+            await Promise.allSettled(deletePromises);
+            totalImagesDeleted += property.images.length;
+          }
+        }
+
+        console.log(
+          `🗑️ Attempted to delete ${totalImagesDeleted} images from local storage`
+        );
+
+        // Now delete the properties from database
+        await Property.deleteMany({
+          createdBy: id,
+          approvalStatus: { $in: ["not_applicable", "rejected"] },
         });
       }
     }
 
-    // Delete user (only rejected properties will remain, which is acceptable)
+    // Delete the user
     await User.findByIdAndDelete(id);
+
+    // Prepare response message based on what happened
+    let message = "User deleted successfully";
+    const details = {};
+
+    if (req.userRole === "SuperAdmin") {
+      const transferredCount = propertiesToTransfer
+        ? propertiesToTransfer.length
+        : 0;
+      const deletedCount = propertiesToDelete ? propertiesToDelete.length : 0;
+
+      if (transferredCount > 0 || deletedCount > 0) {
+        details.propertyActions = {};
+
+        if (transferredCount > 0) {
+          details.propertyActions.transferred = {
+            count: transferredCount,
+            message: `${transferredCount} approved/pending properties transferred to SuperAdmin`,
+          };
+        }
+
+        if (deletedCount > 0) {
+          details.propertyActions.deleted = {
+            count: deletedCount,
+            imagesDeleted: totalImagesDeleted,
+            message: `${deletedCount} draft/rejected properties deleted with ${totalImagesDeleted} images cleaned up`,
+          };
+        }
+
+        message = `User deleted successfully. ${transferredCount} properties transferred, ${deletedCount} properties deleted with ${totalImagesDeleted} images cleaned up.`;
+      }
+    }
 
     res.status(200).json({
       success: true,
-      message: "User deleted successfully",
+      message,
+      details: Object.keys(details).length > 0 ? details : undefined,
     });
   } catch (error) {
     console.error("Error deleting user:", error);
@@ -556,12 +733,15 @@ const updateUserStatus = async (req, res) => {
     // Update only the isActive field
     user.isActive = isActive;
     user.updatedAt = new Date();
+    user.updatedBy = req.user.id; // Track who updated this user status
     await user.save();
 
     // Get updated user with only necessary fields
-    const updatedUser = await User.findById(id).select(
-      "_id name email username role isActive createdAt lastLogin"
-    );
+    const updatedUser = await User.findById(id)
+      .select(
+        "_id name email username role isActive createdAt lastLogin updatedAt updatedBy"
+      )
+      .populate("updatedBy", "name username");
 
     res.status(200).json({
       success: true,

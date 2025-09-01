@@ -453,7 +453,7 @@ const getProperties = async (req, res) => {
 
     // Execute query
     const properties = await Property.find(filter)
-      .populate("createdBy", "name email")
+      .populate("createdBy", "name email role")
       .sort(sortObject)
       .skip(skip)
       .limit(parseInt(limit));
@@ -563,8 +563,8 @@ const createPropertyWithImages = async (req, res) => {
       // SuperAdmin properties are automatically approved, others need approval
       if (req.user.role === "SuperAdmin") {
         propertyData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-        propertyData.approvedBy = req.user.id; // Set who approved it
-        propertyData.approvedAt = new Date(); // Set when it was approved
+        propertyData.updatedBy = req.user.id; // Set who approved it
+        propertyData.updatedAt = new Date(); // Set when it was approved
       } else {
         propertyData.approvalStatus = "pending"; // Non-draft properties need approval
       }
@@ -775,6 +775,13 @@ const updateProperty = async (req, res) => {
       // updatedAt will be set automatically by the pre-save hook
     };
 
+    // Helper function to clear rejection reason
+    const clearRejectionReason = () => {
+      if (existingProperty.rejectionReason !== undefined) {
+        existingProperty.rejectionReason = undefined;
+      }
+    };
+
     // Handle approval status based on status changes and user role
     if (propertyData.status !== undefined) {
       const currentStatus = existingProperty.status;
@@ -784,29 +791,27 @@ const updateProperty = async (req, res) => {
       if (currentStatus === "draft" && newStatus !== "draft") {
         if (req.user.role === "SuperAdmin") {
           updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-          updateData.approvedBy = req.user.id; // Set who approved it
-          updateData.approvedAt = new Date(); // Set when it was approved
+          // updatedBy and updatedAt will be set automatically
         } else {
           updateData.approvalStatus = "pending";
         }
-        updateData.rejectionReason = null; // Clear any previous rejection reason
+        clearRejectionReason();
       }
       // If changing FROM non-draft TO draft: remove from approval workflow
       else if (currentStatus !== "draft" && newStatus === "draft") {
         updateData.approvalStatus = "not_applicable";
-        updateData.rejectionReason = null; // Clear any previous rejection reason
+        clearRejectionReason();
       }
       // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
       else if (currentStatus !== "draft" && newStatus !== "draft") {
         // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
         if (req.user.role === "admin") {
           updateData.approvalStatus = "pending";
-          updateData.rejectionReason = null; // Clear any previous rejection reason
+          clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
           updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-          updateData.approvedBy = req.user.id; // Set who approved it
-          updateData.approvedAt = new Date(); // Set when it was approved
-          updateData.rejectionReason = null; // Clear any previous rejection reason
+          // updatedBy and updatedAt will be set automatically
+          clearRejectionReason();
         }
       }
       // If staying draft: keep current approval status (should be "not_applicable")
@@ -815,12 +820,11 @@ const updateProperty = async (req, res) => {
       if (existingProperty.status !== "draft") {
         if (req.user.role === "admin") {
           updateData.approvalStatus = "pending";
-          updateData.rejectionReason = null; // Clear any previous rejection reason
+          clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
           updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-          updateData.approvedBy = req.user.id; // Set who approved it
-          updateData.approvedAt = new Date(); // Set when it was approved
-          updateData.rejectionReason = null; // Clear any previous rejection reason
+          // updatedBy and updatedAt will be set automatically
+          clearRejectionReason();
         }
       }
     }
