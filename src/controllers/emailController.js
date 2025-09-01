@@ -34,7 +34,7 @@ const sendContactEmail = async (req, res) => {
 
     // Setup email data
     const mailOptions = {
-      from: `"${firstName} ${lastName}" <${email}>`,
+      from: `"EarlyBirds Properties" <${process.env.EMAIL_USER}>`,
       to: recipient,
       subject: `Contact Form: ${propertyStatus || 'General'} Inquiry from ${firstName} ${lastName}`,
       html: `
@@ -104,7 +104,7 @@ const sendInstantValuationEmail = async (req, res) => {
 
     // Setup email data
     const mailOptions = {
-      from: `"${name}" <${email}>`,
+      from: `"EarlyBirds Properties" <${process.env.EMAIL_USER}>`,
       to: recipient,
       subject: `Instant Valuation Request: ${propertyType} in ${emirate}`,
       html: `
