@@ -19,7 +19,7 @@ const sendContactEmail = async (req, res) => {
       bedrooms,
       bathrooms,
       message,
-      recipient = process.env.ADMIN_EMAIL // Default recipient
+      recipient = process.env.EMAIL_USER
     } = req.body;
 
     // Validate required fields
@@ -89,7 +89,7 @@ const sendInstantValuationEmail = async (req, res) => {
       size,
       price,
       images,
-      recipient = process.env.ADMIN_EMAIL // Default recipient
+      recipient = process.env.EMAIL_USER
     } = req.body;
 
     // Validate required fields
