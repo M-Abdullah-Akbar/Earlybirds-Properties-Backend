@@ -38,3 +38,6 @@ Thumbs.db
 
 # Development tools
 .zencoder/
+
+# package-lock.json
+package-lock.json
