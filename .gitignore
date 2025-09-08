@@ -46,3 +46,7 @@ package-lock.json
 # Documentation
 VERCEL_DEPLOYMENT.md
 CORS_TROUBLESHOOTING.md
+
+# Config files
+.babelrc
+webpack.config.js

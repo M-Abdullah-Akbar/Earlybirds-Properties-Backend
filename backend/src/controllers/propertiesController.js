@@ -1276,6 +1276,333 @@ const setMainPropertyImage = async (req, res) => {
   }
 };
 
+/**
+ * Create property without images (for properties that don't have images)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const createPropertyWithoutImages = async (req, res) => {
+  try {
+    // ACL middleware has already verified admin permissions
+    const propertyData = {
+      ...req.body,
+      createdBy: req.user.id,
+      images: [], // No images for this route
+    };
+
+    // Set approval status based on property status and user role
+    // Draft properties should not be in approval workflow
+    if (propertyData.status === "draft") {
+      propertyData.approvalStatus = "not_applicable"; // Draft properties are not in approval workflow
+    } else {
+      // SuperAdmin properties are automatically approved, others need approval
+      if (req.user.role === "SuperAdmin") {
+        propertyData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+        propertyData.updatedBy = req.user.id; // Set who approved it
+        propertyData.updatedAt = new Date(); // Set when it was approved
+      } else {
+        propertyData.approvalStatus = "pending"; // Non-draft properties need approval
+      }
+    }
+
+    const property = new Property(propertyData);
+    await property.save();
+
+    // Prepare response object
+    const response = {
+      success: true,
+      data: {
+        property,
+      },
+      message: "Property created successfully without images",
+    };
+
+    // Add warnings if any exist
+    if (req.validationWarnings && req.validationWarnings.length > 0) {
+      response.warnings = req.validationWarnings;
+    }
+
+    res.status(201).json(response);
+  } catch (error) {
+    console.error("Error creating property without images:", error);
+
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+
+      // Provide user-friendly error messages
+      let userFriendlyField = field;
+      let userFriendlyMessage = `${
+        field.charAt(0).toUpperCase() + field.slice(1)
+      } already exists`;
+
+      if (field === "slug") {
+        userFriendlyField = "title"; // Map slug errors to title field for frontend
+        userFriendlyMessage =
+          "A property with this title already exists. Please choose a different title.";
+      }
+
+      const errorResponse = {
+        success: false,
+        error: `Property with this ${
+          field === "slug" ? "title" : field
+        } already exists`,
+        details: [
+          {
+            field: userFriendlyField,
+            message: userFriendlyMessage,
+          },
+        ],
+      };
+
+      return res.status(400).json(errorResponse);
+    }
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: errors,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to create property without images",
+    });
+  }
+};
+
+/**
+ * Update property without modifying images (for properties that don't need image changes)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const updatePropertyWithoutImages = async (req, res) => {
+  try {
+    // ACL middleware has already verified admin permissions
+    const { id } = req.params;
+
+    // Get existing property
+    let existingProperty;
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      existingProperty = await Property.findById(id);
+    } else {
+      existingProperty = await Property.findOne({ slug: id });
+    }
+
+    if (!existingProperty) {
+      return res.status(404).json({
+        success: false,
+        error: "Property not found",
+      });
+    }
+
+    // Check ownership for admin users (SuperAdmin can update any property)
+    if (req.requireOwnership && req.userRole === "admin") {
+      const ownerId = existingProperty.createdBy?.toString();
+
+      if (ownerId !== req.user.id.toString()) {
+        return res.status(403).json({
+          success: false,
+          error: "Access denied - You can only update properties you created",
+        });
+      }
+    }
+
+    const propertyData = req.body;
+    console.log("=== UPDATE PROPERTY WITHOUT IMAGES DEBUG ===");
+    console.log("Received emirate:", propertyData.location?.emirate);
+    console.log(
+      "Received area:",
+      propertyData.location?.area,
+      "(type:",
+      typeof propertyData.location?.area,
+      ")"
+    );
+    console.log("Existing emirate:", existingProperty.location?.emirate);
+    console.log("Existing area:", existingProperty.location?.area);
+    console.log(
+      "✅ Using property data from req.body:",
+      Object.keys(propertyData)
+    );
+
+    // Validate status transitions if status is being updated
+    if (
+      propertyData.status &&
+      propertyData.status !== existingProperty.status
+    ) {
+      const currentStatus = existingProperty.status;
+      const newStatus = propertyData.status;
+
+      // Validate status transitions using the same logic as frontend
+      const allowedStatuses = getValidStatusTransitions(
+        currentStatus,
+        existingProperty.previousStatus
+      );
+
+      if (!allowedStatuses.includes(newStatus)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid status transition: Cannot change status from '${currentStatus}' to '${newStatus}'`,
+          details: {
+            currentStatus,
+            attemptedStatus: newStatus,
+            allowedTransitions: allowedStatuses,
+          },
+        });
+      }
+
+      // Track previous status when archiving
+      if (newStatus === "archived" && currentStatus !== "archived") {
+        propertyData.previousStatus = currentStatus;
+      }
+      // Clear previous status when unarchiving
+      else if (currentStatus === "archived" && newStatus !== "archived") {
+        propertyData.previousStatus = undefined;
+      }
+    }
+
+    const updateData = {
+      ...propertyData,
+      updatedBy: req.user.id,
+      // Keep existing images unchanged
+      images: existingProperty.images,
+      // updatedAt will be set automatically by the pre-save hook
+    };
+
+    // Helper function to clear rejection reason
+    const clearRejectionReason = () => {
+      if (existingProperty.rejectionReason !== undefined) {
+        existingProperty.rejectionReason = undefined;
+      }
+    };
+
+    // Handle approval status based on status changes and user role
+    if (propertyData.status !== undefined) {
+      const currentStatus = existingProperty.status;
+      const newStatus = propertyData.status;
+
+      // If changing FROM draft TO non-draft: needs approval (or auto-approve for SuperAdmin)
+      if (currentStatus === "draft" && newStatus !== "draft") {
+        if (req.user.role === "SuperAdmin") {
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          // updatedBy and updatedAt will be set automatically
+        } else {
+          updateData.approvalStatus = "pending";
+        }
+        clearRejectionReason();
+      }
+      // If changing FROM non-draft TO draft: remove from approval workflow
+      else if (currentStatus !== "draft" && newStatus === "draft") {
+        updateData.approvalStatus = "not_applicable";
+        clearRejectionReason();
+      }
+      // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
+      else if (currentStatus !== "draft" && newStatus !== "draft") {
+        // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
+        if (req.user.role === "admin") {
+          updateData.approvalStatus = "pending";
+          clearRejectionReason();
+        } else if (req.user.role === "SuperAdmin") {
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          // updatedBy and updatedAt will be set automatically
+          clearRejectionReason();
+        }
+      }
+      // If staying draft: keep current approval status (should be "not_applicable")
+    } else {
+      // If no status change but other property changes and not draft: reset to pending for admin (or auto-approve for SuperAdmin)
+      if (existingProperty.status !== "draft") {
+        if (req.user.role === "admin") {
+          updateData.approvalStatus = "pending";
+          clearRejectionReason();
+        } else if (req.user.role === "SuperAdmin") {
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          // updatedBy and updatedAt will be set automatically
+          clearRejectionReason();
+        }
+      }
+    }
+
+    // Update the property without modifying images
+    const updatedProperty = await Property.findByIdAndUpdate(
+      existingProperty._id,
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+      }
+    ).populate("createdBy", "name email");
+
+    if (!updatedProperty) {
+      return res.status(404).json({
+        success: false,
+        error: "Property not found after update",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { property: updatedProperty },
+      message: "Property updated successfully without modifying images",
+    });
+  } catch (error) {
+    console.error("Error updating property without images:", error);
+
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+
+      // Provide user-friendly error messages
+      let userFriendlyField = field;
+      let userFriendlyMessage = `${
+        field.charAt(0).toUpperCase() + field.slice(1)
+      } already exists`;
+
+      if (field === "slug") {
+        userFriendlyField = "title"; // Map slug errors to title field for frontend
+        userFriendlyMessage =
+          "A property with this title already exists. Please choose a different title.";
+      }
+
+      const errorResponse = {
+        success: false,
+        error: `Property with this ${
+          field === "slug" ? "title" : field
+        } already exists`,
+        details: [
+          {
+            field: userFriendlyField,
+            message: userFriendlyMessage,
+          },
+        ],
+      };
+
+      return res.status(400).json(errorResponse);
+    }
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: errors,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to update property without images",
+    });
+  }
+};
+
 module.exports = {
   getAreasForEmirate,
   getAmenitiesForPropertyType,
@@ -1283,7 +1610,9 @@ module.exports = {
   getProperties,
   getProperty,
   createPropertyWithImages,
+  createPropertyWithoutImages,
   updateProperty,
+  updatePropertyWithoutImages,
   deleteProperty,
   deletePropertyImage,
   setMainPropertyImage,

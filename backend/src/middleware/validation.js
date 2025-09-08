@@ -1,4 +1,4 @@
-﻿const { body, query, param, validationResult } = require("express-validator");
+const { body, query, param, validationResult } = require("express-validator");
 const multer = require("multer");
 const {
   EMIRATE_AREA_MAP,
@@ -1243,7 +1243,7 @@ const validateUpdateProperty = [
       // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
       return true;
     } // For all other property types, bedrooms are required
-    else if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
+    else if (bedrooms === null || bedrooms === undefined || bedrooms === "" || bedrooms.toString().trim() === "") {
       throw new Error("Number of bedrooms is required");
     } else if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
       throw new Error("Bedrooms must be a non-negative integer");
@@ -1253,8 +1253,8 @@ const validateUpdateProperty = [
   }),
 
   body("details.bathrooms").custom((bathrooms, { req }) => {
-    // Check if bathrooms is required (empty string check)
-    if (bathrooms === null) {
+    // Check if bathrooms is required (handle null, undefined, empty string)
+    if (bathrooms === null || bathrooms === undefined || bathrooms === "" || bathrooms.toString().trim() === "") {
       throw new Error("Number of bathrooms is required");
     }
 
@@ -1275,8 +1275,8 @@ const validateUpdateProperty = [
   }),
 
   body("details.area").custom((area, { req }) => {
-    // Check if area is required (empty string check)
-    if (area === null) {
+    // Check if area is required (handle null, undefined, empty string)
+    if (area === null || area === undefined || area === "" || area.toString().trim() === "") {
       throw new Error("Property area is required");
     }
 
@@ -1475,14 +1475,16 @@ const validateUpdateProperty = [
 
     // If we have a direct images array (legacy format), use that instead
     if (images !== undefined) {
+      // Images are now optional - allow empty arrays
       if (images.length === 0) {
-        throw new Error("At least one image is required");
+        return true; // Allow properties without images
       }
       totalImages = images.length;
     } else {
-      // For the new format (existingImages + uploadedImages), check total
+      // For the new format (existingImages + uploadedImages), images are optional
+      // Allow properties without images
       if (totalImages === 0) {
-        throw new Error("At least one image is required");
+        return true; // Allow properties without images
       }
     }
 
@@ -1496,10 +1498,9 @@ const validateUpdateProperty = [
       return true;
     }
 
-    // If images field is provided but empty, it means user wants to remove all images
-    // This should be rejected as properties must have at least one image
+    // If images field is provided but empty, allow it (images are now optional)
     if (images.length === 0) {
-      throw new Error("At least one image is required");
+      return true; // Allow properties without images
     }
 
     // Check array length
@@ -2112,6 +2113,272 @@ const createPropertyWithImagesValidation = [
 ];
 
 /**
+ * Validation for creating properties without images - allows empty image arrays
+ */
+const validateCreatePropertyWithoutImages = [
+  // Copy all validations from validateCreateProperty except images
+  body("title")
+    .custom((title, { req }) => {
+      if (!title || title.trim() === "") {
+        throw new Error("Title is required");
+      }
+      if (title.length < 10) {
+        throw new Error("Title must be at least 10 characters long");
+      }
+      if (title.length > 100) {
+        throw new Error("Title must not exceed 100 characters");
+      }
+      return true;
+    })
+    .custom(async (title, { req }) => {
+      const Property = require("../models/Property");
+      const existingProperty = await Property.findOne({
+        title: { $regex: new RegExp(`^${title}$`, "i") },
+      });
+      if (existingProperty) {
+        throw new Error("A property with this title already exists");
+      }
+      return true;
+    }),
+
+  body("description").custom((description, { req }) => {
+    if (!description || description.trim() === "") {
+      throw new Error("Description is required");
+    }
+    if (description.length < 50) {
+      throw new Error("Description must be at least 50 characters long");
+    }
+    if (description.length > 2000) {
+      throw new Error("Description must not exceed 2000 characters");
+    }
+    return true;
+  }),
+
+  // Property type validation
+  body("propertyType").custom((propertyType, { req }) => {
+    if (!propertyType) {
+      throw new Error("Property type is required");
+    }
+    if (!PROPERTY_TYPES.includes(propertyType)) {
+      throw new Error(
+        `Invalid property type. Must be one of: ${PROPERTY_TYPES.join(", ")}`
+      );
+    }
+    return true;
+  }),
+
+  body("price").custom((price, { req }) => {
+    // Skip price validation for "off plan" listing type
+    if (req.body.listingType === "off plan") {
+      return true;
+    }
+
+    // Check if price is required (null, undefined, empty string, or string "NaN")
+    if (
+      price === null ||
+      price === undefined ||
+      price === "" ||
+      price === "NaN"
+    ) {
+      throw new Error("Price is required");
+    }
+
+    // Convert to number and validate it's a positive float
+    const numPrice = parseFloat(price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      throw new Error("Price must be a positive number");
+    }
+
+    // Update the request body with the parsed number
+    req.body.price = numPrice;
+
+    return true;
+  }),
+
+  // Location validations
+  body("location.address").custom((address, { req }) => {
+    if (!address || address.trim() === "") {
+      throw new Error("Address is required");
+    }
+    if (address.length < 10) {
+      throw new Error("Address must be at least 10 characters long");
+    }
+    if (address.length > 200) {
+      throw new Error("Address must not exceed 200 characters");
+    }
+    return true;
+  }),
+
+  body("location.emirate").notEmpty().withMessage("Emirate is required"),
+
+  body("location.area").custom((value, { req }) => {
+    if (!value || value.trim() === "") {
+      throw new Error("Area is required");
+    }
+    return true;
+  }),
+
+  // Details validations (manually copied from validateCreateProperty)
+  body("details.bedrooms").custom((bedrooms, { req }) => {
+    if (bedrooms === undefined || bedrooms === null) {
+      throw new Error("Number of bedrooms is required");
+    }
+    if (!Number.isInteger(bedrooms) || bedrooms < 0 || bedrooms > 20) {
+      throw new Error("Bedrooms must be an integer between 0 and 20");
+    }
+    return true;
+  }),
+
+  body("details.bathrooms").custom((bathrooms, { req }) => {
+    if (bathrooms === undefined || bathrooms === null) {
+      throw new Error("Number of bathrooms is required");
+    }
+    if (!Number.isInteger(bathrooms) || bathrooms < 1 || bathrooms > 20) {
+      throw new Error("Bathrooms must be an integer between 1 and 20");
+    }
+    return true;
+  }),
+
+  body("details.area").custom((area, { req }) => {
+    if (area === undefined || area === null) {
+      throw new Error("Area is required");
+    }
+    if (typeof area !== "number" || area <= 0 || area > 50000) {
+      throw new Error("Area must be a positive number not exceeding 50,000");
+    }
+    return true;
+  }),
+
+  body("details.totalFloors").custom((totalFloors, { req }) => {
+    if (totalFloors !== undefined && totalFloors !== null) {
+      if (!Number.isInteger(totalFloors) || totalFloors < 1 || totalFloors > 200) {
+        throw new Error("Total floors must be an integer between 1 and 200");
+      }
+    }
+    return true;
+  }),
+
+  body("details.floorLevel").custom((floorLevel, { req }) => {
+    if (floorLevel !== undefined && floorLevel !== null) {
+      if (!Number.isInteger(floorLevel) || floorLevel < -10 || floorLevel > 200) {
+        throw new Error("Floor level must be an integer between -10 and 200");
+      }
+    }
+    return true;
+  }),
+
+  body("details.landArea").custom((landArea, { req }) => {
+    if (landArea !== undefined && landArea !== null) {
+      if (typeof landArea !== "number" || landArea <= 0 || landArea > 1000000) {
+        throw new Error("Land area must be a positive number not exceeding 1,000,000");
+      }
+    }
+    return true;
+  }),
+
+  body("details.yearBuilt").custom((yearBuilt) => {
+    if (yearBuilt !== undefined && yearBuilt !== null) {
+      const currentYear = new Date().getFullYear();
+      if (!Number.isInteger(yearBuilt) || yearBuilt < 1800 || yearBuilt > currentYear + 5) {
+        throw new Error(`Year built must be between 1800 and ${currentYear + 5}`);
+      }
+    }
+    return true;
+  }),
+
+  body("amenities")
+    .optional({ nullable: true, checkFalsy: true })
+    .if(body("amenities").exists())
+    .isArray()
+    .withMessage("Amenities must be an array")
+    .custom(async (amenities, { req }) => {
+      if (amenities && amenities.length > 0) {
+        const propertyType = req.body.propertyType;
+        if (!propertyType) {
+          throw new Error("Property type is required to validate amenities");
+        }
+        const allowedAmenities = PROPERTY_TYPE_AMENITIES_MAP[propertyType];
+        if (!allowedAmenities) {
+          throw new Error("Invalid property type for amenities validation");
+        }
+        for (const amenity of amenities) {
+          if (!allowedAmenities.includes(amenity)) {
+            throw new Error(`Invalid amenity '${amenity}' for property type '${propertyType}'`);
+          }
+        }
+      }
+      return true;
+    }),
+
+  body("listingType").custom((listingType, { req }) => {
+    if (!listingType) {
+      throw new Error("Listing type is required");
+    }
+    if (!LISTING_TYPES.includes(listingType)) {
+      throw new Error("Invalid listing type");
+    }
+    return true;
+  }),
+
+  body("details.parking.type").custom((parkingType, { req }) => {
+    if (parkingType !== undefined && parkingType !== null) {
+      const validTypes = ["covered", "open", "none"];
+      if (!validTypes.includes(parkingType)) {
+        throw new Error("Parking type must be 'covered', 'open', or 'none'");
+      }
+    }
+    return true;
+  }),
+
+  body("details.parking.spaces").custom((spaces, { req }) => {
+    if (spaces !== undefined && spaces !== null) {
+      if (!Number.isInteger(spaces) || spaces < 0 || spaces > 20) {
+        throw new Error("Parking spaces must be an integer between 0 and 20");
+      }
+    }
+    return true;
+  }),
+
+  body("status").custom((status, { req }) => {
+    if (status !== undefined && status !== null) {
+      if (!PROPERTY_STATUS.includes(status)) {
+        throw new Error("Invalid status");
+      }
+    }
+    return true;
+  }),
+
+  // Modified images validation - allows empty arrays
+  body("images").custom((images, { req }) => {
+    if (images === undefined || images === null) {
+      return true; // Allow undefined/null for without-images endpoint
+    }
+    if (!Array.isArray(images)) {
+      throw new Error("Images must be an array");
+    }
+    // Allow empty arrays for without-images endpoint
+    if (images.length === 0) {
+      return true;
+    }
+    if (images.length > 10) {
+      throw new Error("Cannot have more than 10 images");
+    }
+    return true;
+  }),
+
+  cleanupParkingFields,
+  handleValidationErrors,
+];
+
+/**
+ * Combined validation middleware for creating properties without images
+ */
+const createPropertyWithoutImagesValidation = [
+  sanitizeInput,
+  ...validateCreatePropertyWithoutImages,
+];
+
+/**
  * Combined validation middleware for updating properties
  */
 const updatePropertyValidation = [
@@ -2610,6 +2877,7 @@ module.exports = {
   loginValidation,
   changePasswordValidation,
   createPropertyWithImagesValidation,
+  createPropertyWithoutImagesValidation,
   updatePropertyValidation,
   propertyQueryValidation,
   singlePropertyValidation,
