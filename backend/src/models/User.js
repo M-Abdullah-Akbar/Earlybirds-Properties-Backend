@@ -94,8 +94,12 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 
 // Generate JWT token
 userSchema.methods.generateAuthToken = function () {
-  const expiresIn = process.env.JWT_EXPIRE
-  console.log('JWT_EXPIRE value:', JSON.stringify(expiresIn));
+  const expiresIn = process.env.JWT_EXPIRE;
+  console.log('JWT_EXPIRE value:', expiresIn);
+  
+  if (!expiresIn) {
+    throw new Error('JWT_EXPIRE environment variable is not set. Please configure it in your deployment environment.');
+  }
   
   return jwt.sign(
     {
