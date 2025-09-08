@@ -94,6 +94,9 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 
 // Generate JWT token
 userSchema.methods.generateAuthToken = function () {
+  const expiresIn = process.env.JWT_EXPIRE
+  console.log('JWT_EXPIRE value:', JSON.stringify(expiresIn));
+  
   return jwt.sign(
     {
       id: this._id,
@@ -103,7 +106,7 @@ userSchema.methods.generateAuthToken = function () {
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: process.env.JWT_EXPIRE, // Shorter expiry for admin
+      expiresIn: expiresIn, // Fallback to 24h if not set
     }
   );
 };
