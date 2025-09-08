@@ -4,7 +4,7 @@ const helmet = require("helmet");
 const compression = require("compression");
 const path = require("path");
 require("dotenv").config({
-  path: process.env.NODE_ENV === "production" ? "./.env" : "./backend/.env",
+  path: process.env.NODE_ENV === "production" ? "./backend/.env" : "./backend/.env",
 });
 const { connectDB } = require("./config/database.js");
 
