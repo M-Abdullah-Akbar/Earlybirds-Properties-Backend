@@ -40,8 +40,6 @@ Thumbs.db
 # Development tools
 .zencoder/
 
-# package-lock.json
-package-lock.json
 
 # Documentation
 VERCEL_DEPLOYMENT.md
@@ -50,3 +48,9 @@ CORS_TROUBLESHOOTING.md
 # Config files
 .babelrc
 webpack.config.js
+
+# dist
+dist/
+
+# package-lock.json
+package-lock.json

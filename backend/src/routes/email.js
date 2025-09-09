@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { sendContactEmail, sendInstantValuationEmail } = require('../controllers/emailController');
+const { sendContactEmail, sendInstantValuationEmail, sendPropertyInquiryEmail } = require('../controllers/emailController');
 
 /**
  * @route   POST /api/email/contact
@@ -13,6 +13,13 @@ const { sendContactEmail, sendInstantValuationEmail } = require('../controllers/
  * @access  Public
  */
 router.post('/contact', sendContactEmail);
+
+/**
+ * @route   POST /api/email/property-inquiry
+ * @desc    Send property inquiry email
+ * @access  Public
+ */
+router.post('/property-inquiry', sendPropertyInquiryEmail);
 
 /**
  * @route   POST /api/email/instant-valuation

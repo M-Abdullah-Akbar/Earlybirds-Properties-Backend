@@ -72,6 +72,123 @@ const sendContactEmail = async (req, res) => {
 };
 
 /**
+ * Send property inquiry email
+ * @route POST /api/email/property-inquiry
+ * @access Public
+ */
+const sendPropertyInquiryEmail = async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      message,
+      propertyId,
+      propertyTitle,
+      agent,
+      type = 'property_inquiry',
+      recipient = process.env.EMAIL_USER
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !phone || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide name, email, phone and message'
+      });
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
+      });
+    }
+
+    const transporter = createTransporter();
+
+    // Email to agent/company
+    const agentEmailOptions = {
+      from: `"EarlyBirds Properties" <${process.env.EMAIL_USER}>`,
+      to: recipient,
+      subject: `New Property Inquiry - ${propertyTitle || 'Property'}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #bd8c31;">New Property Inquiry</h2>
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3>Contact Information:</h3>
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Phone:</strong> ${phone}</p>
+          </div>
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3>Property Details:</h3>
+            <p><strong>Property ID:</strong> ${propertyId || 'N/A'}</p>
+            <p><strong>Property Title:</strong> ${propertyTitle || 'N/A'}</p>
+            <p><strong>Agent:</strong> ${agent}</p>
+          </div>
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3>Message:</h3>
+            <p>${message}</p>
+          </div>
+          <p style="color: #666; font-size: 12px;">This inquiry was submitted through the EarlyBirds Properties website.</p>
+        </div>
+      `,
+      replyTo: email
+    };
+
+    // Confirmation email to customer
+    const customerEmailOptions = {
+      from: `"EarlyBirds Properties" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Thank you for your property inquiry - EarlyBirds Properties',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #bd8c31;">Thank you for your inquiry!</h2>
+          <p>Dear ${name},</p>
+          <p>Thank you for your interest in our property. We have received your inquiry and our team will get back to you within 24 hours.</p>
+          
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3>Your Inquiry Details:</h3>
+            <p><strong>Property:</strong> ${propertyTitle || 'Property'}</p>
+            <p><strong>Agent:</strong> ${agent}</p>
+            <p><strong>Your Message:</strong> ${message}</p>
+          </div>
+          
+          <p>If you have any urgent questions, please don't hesitate to contact us directly:</p>
+          <p><strong>Phone:</strong> +971 50 123 4567</p>
+          <p><strong>Email:</strong> info@earlybirds.ae</p>
+          
+          <p>Best regards,<br>EarlyBirds Properties Team</p>
+          
+          <p style="color: #666; font-size: 12px;">This is an automated confirmation email. Please do not reply to this email.</p>
+        </div>
+      `
+    };
+
+    // Send both emails
+    await Promise.all([
+      transporter.sendMail(agentEmailOptions),
+      transporter.sendMail(customerEmailOptions)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Property inquiry sent successfully'
+    });
+  } catch (error) {
+    console.error('Error sending property inquiry email:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send property inquiry',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Send instant valuation email
  * @route POST /api/email/instant-valuation
  * @access Public
@@ -148,5 +265,6 @@ const sendInstantValuationEmail = async (req, res) => {
 
 module.exports = {
   sendContactEmail,
-  sendInstantValuationEmail
+  sendInstantValuationEmail,
+  sendPropertyInquiryEmail
 };
