@@ -404,31 +404,25 @@ const validateCreateProperty = [
     }
   }),
 
-  body("price").custom((price, { req }) => {
-    // Skip price validation for "off plan" listing type
-    if (req.body.listingType === "off plan") {
+  // Optional price validation - only validates when data is present
+  body("price").optional().custom((price, { req }) => {
+    const listingType = req.body.listingType;
+    
+    // Skip validation for "off plan" listing type
+    if (listingType === "off plan") {
       return true;
     }
-
-    // Check if price is required (null, undefined, empty string, or string "NaN")
-    if (
-      price === null ||
-      price === undefined ||
-      price === "" ||
-      price === "NaN"
-    ) {
-      throw new Error("Price is required");
+    
+    // If price is provided, validate it
+    if (price !== undefined && price !== null && price !== "") {
+      const numPrice = parseFloat(price);
+      if (isNaN(numPrice) || numPrice <= 0) {
+        throw new Error("Price must be a positive number");
+      }
+      // Update the request body with the parsed number
+      req.body.price = numPrice;
     }
-
-    // Convert to number and validate it's a positive float
-    const numPrice = parseFloat(price);
-    if (isNaN(numPrice) || numPrice < 0) {
-      throw new Error("Price must be a positive number");
-    }
-
-    // Update the request body with the parsed number
-    req.body.price = numPrice;
-
+    
     return true;
   }),
 
@@ -472,69 +466,64 @@ const validateCreateProperty = [
 
   // Property details validation
 
-  body("details.bedrooms").custom((bedrooms, { req }) => {
+  // Optional bedrooms validation - only validates when data is present
+  body("details.bedrooms").optional().custom((bedrooms, { req }) => {
     const propertyType = req.body.propertyType;
 
     // For studio and office property types, bedrooms should not be provided
     if (propertyType === "studio" || propertyType === "office") {
-      // If bedrooms field exists (not null and not undefined), reject it
-      if (bedrooms !== null && bedrooms !== undefined && bedrooms !== "") {
+      // If bedrooms field exists and has a value, reject it
+      if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
         throw new Error(
           `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
         );
       }
-      // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
       return true;
     }
-
-    // For all other property types, bedrooms are required
-    if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
-      throw new Error("Number of bedrooms is required");
-    }
-
-    if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
-      throw new Error("Bedrooms must be a non-negative integer");
+    
+    // If bedrooms is provided, validate it
+    if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
+      if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
+        throw new Error("Bedrooms must be a non-negative integer");
+      }
     }
 
     return true;
   }),
 
-  body("details.bathrooms").custom((bathrooms, { req }) => {
-    // Check if bathrooms is required (empty string check)
-    if (bathrooms === null || bathrooms === undefined) {
-      throw new Error("Number of bathrooms is required");
+  // Optional bathrooms validation - only validates when data is present
+  body("details.bathrooms").optional().custom((bathrooms, { req }) => {
+    // If bathrooms is provided, validate it
+    if (bathrooms !== undefined && bathrooms !== null && bathrooms !== "") {
+      const numBathrooms = parseInt(bathrooms);
+      if (
+        isNaN(numBathrooms) ||
+        numBathrooms < 0 ||
+        !Number.isInteger(Number(bathrooms))
+      ) {
+        throw new Error("Bathrooms must be a non-negative integer");
+      }
+      // Update the request body with the parsed number
+      req.body.details.bathrooms = numBathrooms;
     }
-
-    // Convert to number and validate it's a non-negative integer
-    const numBathrooms = parseInt(bathrooms);
-    if (
-      isNaN(numBathrooms) ||
-      numBathrooms < 0 ||
-      !Number.isInteger(Number(bathrooms))
-    ) {
-      throw new Error("Bathrooms must be a non-negative integer");
-    }
-
-    // Update the request body with the parsed number
-    req.body.details.bathrooms = numBathrooms;
 
     return true;
   }),
 
-  body("details.area").custom((area, { req }) => {
-    // Check if area is required (empty string check)
-    if (area === null || area === undefined) {
-      throw new Error("Property area is required");
+  // Optional area validation - only validates when data is present
+  body("details.area").optional().custom((area, { req }) => {
+    // If area is provided, validate it
+    if (area !== undefined && area !== null && area !== "") {
+      const numArea = parseFloat(area);
+      if (isNaN(numArea) || numArea <= 0) {
+        throw new Error("Property area must be a positive number");
+      }
+      if (numArea > 50000) {
+        throw new Error("Property area cannot exceed 50,000 square feet");
+      }
+      // Update the request body with the parsed number
+      req.body.details.area = numArea;
     }
-
-    // Convert to number and validate it's a positive float
-    const numArea = parseFloat(area);
-    if (isNaN(numArea) || numArea <= 0) {
-      throw new Error("Property area must be a positive number");
-    }
-
-    // Update the request body with the parsed number
-    req.body.details.area = numArea;
 
     return true;
   }),
@@ -1044,26 +1033,25 @@ const validateUpdateProperty = [
     return true;
   }),
 
-  body("price").custom((price, { req }) => {
-    // Skip price validation for "off plan" listing type
-    if (req.body.listingType === "off plan") {
+  // Optional price validation - only validates when data is present
+  body("price").optional().custom((price, { req }) => {
+    const listingType = req.body.listingType;
+    
+    // Skip validation for "off plan" listing type
+    if (listingType === "off plan") {
       return true;
     }
-
-    // Check if price is required (empty string check)
-    if (price === null) {
-      throw new Error("Price is required");
+    
+    // If price is provided, validate it
+    if (price !== undefined && price !== null && price !== "") {
+      const numPrice = parseFloat(price);
+      if (isNaN(numPrice) || numPrice <= 0) {
+        throw new Error("Price must be a positive number");
+      }
+      // Update the request body with the parsed number
+      req.body.price = numPrice;
     }
-
-    // Convert to number and validate it's a positive float
-    const numPrice = parseFloat(price);
-    if (isNaN(numPrice) || numPrice < 0) {
-      throw new Error("Price must be a positive number");
-    }
-
-    // Update the request body with the parsed number
-    req.body.price = numPrice;
-
+    
     return true;
   }),
 
@@ -1229,65 +1217,64 @@ const validateUpdateProperty = [
 
   // Property details validation
 
-  body("details.bedrooms").custom((bedrooms, { req }) => {
+  // Optional bedrooms validation - only validates when data is present
+  body("details.bedrooms").optional().custom((bedrooms, { req }) => {
     const propertyType = req.body.propertyType;
 
     // For studio and office property types, bedrooms should not be provided
     if (propertyType === "studio" || propertyType === "office") {
-      // If bedrooms field exists (not null and not undefined), reject it
-      if (bedrooms !== "" && bedrooms !== null && bedrooms !== undefined) {
+      // If bedrooms field exists and has a value, reject it
+      if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
         throw new Error(
           `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
         );
       }
-      // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
       return true;
-    } // For all other property types, bedrooms are required
-    else if (bedrooms === null || bedrooms === undefined || bedrooms === "" || bedrooms.toString().trim() === "") {
-      throw new Error("Number of bedrooms is required");
-    } else if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
-      throw new Error("Bedrooms must be a non-negative integer");
+    }
+    
+    // If bedrooms is provided, validate it
+    if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
+      if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
+        throw new Error("Bedrooms must be a non-negative integer");
+      }
     }
 
     return true;
   }),
 
-  body("details.bathrooms").custom((bathrooms, { req }) => {
-    // Check if bathrooms is required (handle null, undefined, empty string)
-    if (bathrooms === null || bathrooms === undefined || bathrooms === "" || bathrooms.toString().trim() === "") {
-      throw new Error("Number of bathrooms is required");
+  // Optional bathrooms validation - only validates when data is present
+  body("details.bathrooms").optional().custom((bathrooms, { req }) => {
+    // If bathrooms is provided, validate it
+    if (bathrooms !== undefined && bathrooms !== null && bathrooms !== "") {
+      const numBathrooms = parseInt(bathrooms);
+      if (
+        isNaN(numBathrooms) ||
+        numBathrooms < 0 ||
+        !Number.isInteger(Number(bathrooms))
+      ) {
+        throw new Error("Bathrooms must be a non-negative integer");
+      }
+      // Update the request body with the parsed number
+      req.body.details.bathrooms = numBathrooms;
     }
-
-    // Convert to number and validate it's a non-negative integer
-    const numBathrooms = parseInt(bathrooms);
-    if (
-      isNaN(numBathrooms) ||
-      numBathrooms < 0 ||
-      !Number.isInteger(Number(bathrooms))
-    ) {
-      throw new Error("Bathrooms must be a non-negative integer");
-    }
-
-    // Update the request body with the parsed number
-    req.body.details.bathrooms = numBathrooms;
 
     return true;
   }),
 
-  body("details.area").custom((area, { req }) => {
-    // Check if area is required (handle null, undefined, empty string)
-    if (area === null || area === undefined || area === "" || area.toString().trim() === "") {
-      throw new Error("Property area is required");
+  // Optional area validation - only validates when data is present
+  body("details.area").optional().custom((area, { req }) => {
+    // If area is provided, validate it
+    if (area !== undefined && area !== null && area !== "") {
+      const numArea = parseFloat(area);
+      if (isNaN(numArea) || numArea <= 0) {
+        throw new Error("Property area must be a positive number");
+      }
+      if (numArea > 50000) {
+        throw new Error("Property area cannot exceed 50,000 square feet");
+      }
+      // Update the request body with the parsed number
+      req.body.details.area = numArea;
     }
-
-    // Convert to number and validate it's a positive float
-    const numArea = parseFloat(area);
-    if (isNaN(numArea) || numArea <= 0) {
-      throw new Error("Property area must be a positive number");
-    }
-
-    // Update the request body with the parsed number
-    req.body.details.area = numArea;
 
     return true;
   }),
@@ -2164,33 +2151,7 @@ const validateCreatePropertyWithoutImages = [
     return true;
   }),
 
-  body("price").custom((price, { req }) => {
-    // Skip price validation for "off plan" listing type
-    if (req.body.listingType === "off plan") {
-      return true;
-    }
-
-    // Check if price is required (null, undefined, empty string, or string "NaN")
-    if (
-      price === null ||
-      price === undefined ||
-      price === "" ||
-      price === "NaN"
-    ) {
-      throw new Error("Price is required");
-    }
-
-    // Convert to number and validate it's a positive float
-    const numPrice = parseFloat(price);
-    if (isNaN(numPrice) || numPrice < 0) {
-      throw new Error("Price must be a positive number");
-    }
-
-    // Update the request body with the parsed number
-    req.body.price = numPrice;
-
-    return true;
-  }),
+  // Price validation removed - no longer required
 
   // Location validations
   body("location.address").custom((address, { req }) => {
@@ -2216,35 +2177,11 @@ const validateCreatePropertyWithoutImages = [
   }),
 
   // Details validations (manually copied from validateCreateProperty)
-  body("details.bedrooms").custom((bedrooms, { req }) => {
-    if (bedrooms === undefined || bedrooms === null) {
-      throw new Error("Number of bedrooms is required");
-    }
-    if (!Number.isInteger(bedrooms) || bedrooms < 0 || bedrooms > 20) {
-      throw new Error("Bedrooms must be an integer between 0 and 20");
-    }
-    return true;
-  }),
+  // Bedrooms validation removed - no longer required
 
-  body("details.bathrooms").custom((bathrooms, { req }) => {
-    if (bathrooms === undefined || bathrooms === null) {
-      throw new Error("Number of bathrooms is required");
-    }
-    if (!Number.isInteger(bathrooms) || bathrooms < 1 || bathrooms > 20) {
-      throw new Error("Bathrooms must be an integer between 1 and 20");
-    }
-    return true;
-  }),
+  // Bathrooms validation removed - no longer required
 
-  body("details.area").custom((area, { req }) => {
-    if (area === undefined || area === null) {
-      throw new Error("Area is required");
-    }
-    if (typeof area !== "number" || area <= 0 || area > 50000) {
-      throw new Error("Area must be a positive number not exceeding 50,000");
-    }
-    return true;
-  }),
+  // Area validation removed - no longer required
 
   body("details.totalFloors").custom((totalFloors, { req }) => {
     if (totalFloors !== undefined && totalFloors !== null) {
