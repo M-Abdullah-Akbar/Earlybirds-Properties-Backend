@@ -2148,9 +2148,6 @@ const validateCreatePropertyWithoutImages = [
     if (description.length < 50) {
       throw new Error("Description must be at least 50 characters long");
     }
-    if (description.length > 2000) {
-      throw new Error("Description must not exceed 2000 characters");
-    }
     return true;
   }),
 
