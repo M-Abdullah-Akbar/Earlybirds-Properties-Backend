@@ -82,11 +82,9 @@ const detailsSchema = new mongoose.Schema(
     },
     bathrooms: {
       type: Number,
-      required: true,
     },
     area: {
       type: Number,
-      required: true,
     },
     areaUnit: {
       type: String,

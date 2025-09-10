@@ -790,26 +790,26 @@ const updateProperty = async (req, res) => {
       // If changing FROM draft TO non-draft: needs approval (or auto-approve for SuperAdmin)
       if (currentStatus === "draft" && newStatus !== "draft") {
         if (req.user.role === "SuperAdmin") {
-          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
         } else {
-          updateData.approvalStatus = "pending";
+          updateOperation.$set.approvalStatus = "pending";
         }
         clearRejectionReason();
       }
       // If changing FROM non-draft TO draft: remove from approval workflow
       else if (currentStatus !== "draft" && newStatus === "draft") {
-        updateData.approvalStatus = "not_applicable";
+        updateOperation.$set.approvalStatus = "not_applicable";
         clearRejectionReason();
       }
       // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
       else if (currentStatus !== "draft" && newStatus !== "draft") {
         // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
         if (req.user.role === "admin") {
-          updateData.approvalStatus = "pending";
+          updateOperation.$set.approvalStatus = "pending";
           clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
-          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
           clearRejectionReason();
         }
@@ -819,10 +819,10 @@ const updateProperty = async (req, res) => {
       // If no status change but other property changes and not draft: reset to pending for admin (or auto-approve for SuperAdmin)
       if (existingProperty.status !== "draft") {
         if (req.user.role === "admin") {
-          updateData.approvalStatus = "pending";
+          updateOperation.$set.approvalStatus = "pending";
           clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
-          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
           clearRejectionReason();
         }
@@ -1466,13 +1466,35 @@ const updatePropertyWithoutImages = async (req, res) => {
       }
     }
 
-    const updateData = {
-      ...propertyData,
-      updatedBy: req.user.id,
-      // Keep existing images unchanged
-      images: existingProperty.images,
-      // updatedAt will be set automatically by the pre-save hook
-    };
+    // Handle empty string values for price field - use $unset to remove when empty
+    const processedData = { ...propertyData };
+    let updateOperation = {};
+    
+    // Store the original price value before potentially deleting it
+    const originalPrice = processedData.price;
+    
+    if (processedData.price === "") {
+      // Remove price from the update data and use $unset to clear it
+      delete processedData.price;
+      updateOperation = {
+        $set: {
+          ...processedData,
+          updatedBy: req.user.id,
+          images: existingProperty.images,
+        },
+        $unset: {
+          price: 1 // Remove the price field entirely
+        }
+      };
+    } else {
+      updateOperation = {
+        $set: {
+          ...processedData,
+          updatedBy: req.user.id,
+          images: existingProperty.images,
+        }
+      };
+    }
 
     // Helper function to clear rejection reason
     const clearRejectionReason = () => {
@@ -1489,26 +1511,26 @@ const updatePropertyWithoutImages = async (req, res) => {
       // If changing FROM draft TO non-draft: needs approval (or auto-approve for SuperAdmin)
       if (currentStatus === "draft" && newStatus !== "draft") {
         if (req.user.role === "SuperAdmin") {
-          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
         } else {
-          updateData.approvalStatus = "pending";
+          updateOperation.$set.approvalStatus = "pending";
         }
         clearRejectionReason();
       }
       // If changing FROM non-draft TO draft: remove from approval workflow
       else if (currentStatus !== "draft" && newStatus === "draft") {
-        updateData.approvalStatus = "not_applicable";
+        updateOperation.$set.approvalStatus = "not_applicable";
         clearRejectionReason();
       }
       // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
       else if (currentStatus !== "draft" && newStatus !== "draft") {
         // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
         if (req.user.role === "admin") {
-          updateData.approvalStatus = "pending";
+          updateOperation.$set.approvalStatus = "pending";
           clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
-          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
           clearRejectionReason();
         }
@@ -1518,10 +1540,10 @@ const updatePropertyWithoutImages = async (req, res) => {
       // If no status change but other property changes and not draft: reset to pending for admin (or auto-approve for SuperAdmin)
       if (existingProperty.status !== "draft") {
         if (req.user.role === "admin") {
-          updateData.approvalStatus = "pending";
+          updateOperation.$set.approvalStatus = "pending";
           clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
-          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
           clearRejectionReason();
         }
@@ -1529,13 +1551,22 @@ const updatePropertyWithoutImages = async (req, res) => {
     }
 
     // Update the property without modifying images
+    // Disable validation when using $unset to avoid required field validation errors
+    // For off-plan properties, price is not required so we can always run validators
+    // For non-off-plan properties, disable validators only when explicitly clearing price (empty string)
+    const currentListingType = processedData.listingType || existingProperty.listingType;
+    const shouldRunValidators = currentListingType === "off plan" || 
+                               (currentListingType !== "off plan" && originalPrice !== "");
+    
+    const updateOptions = {
+      new: true,
+      runValidators: shouldRunValidators,
+    };
+    
     const updatedProperty = await Property.findByIdAndUpdate(
       existingProperty._id,
-      updateData,
-      {
-        new: true,
-        runValidators: true,
-      }
+      updateOperation,
+      updateOptions
     ).populate("createdBy", "name email");
 
     if (!updatedProperty) {
