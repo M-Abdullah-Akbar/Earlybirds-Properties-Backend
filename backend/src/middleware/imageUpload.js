@@ -177,7 +177,7 @@ const processValidatedImages = async (req, res, next) => {
 
   try {
     console.log(
-      `🔄 Processing ${req.pendingImages.length} validated image(s)...`
+      `🔄 Processing ${req.pendingImages.length} validated image(s) with SMART COMPRESSION...`
     );
 
     // Import the image processing functions
@@ -204,11 +204,31 @@ const processValidatedImages = async (req, res, next) => {
       const file = req.pendingImages[i];
 
       try {
+        console.log(
+          `\n🖼️  === PROCESSING IMAGE ${i + 1}/${req.pendingImages.length}: ${
+            file.originalname
+          } ===`
+        );
+
         // Validate the image
         await validateImage(file.buffer, file.originalname);
+        console.log(`✅ Image validation passed for: ${file.originalname}`);
 
         // Get original image metadata
         const originalMetadata = await getImageMetadata(file.buffer);
+        const originalSize = file.size;
+        const originalSizeKB = Math.round(originalSize / 1024);
+        const megapixels =
+          (originalMetadata.width * originalMetadata.height) / (1024 * 1024);
+
+        console.log(
+          `📊 Original size: ${originalSize} bytes (${originalSizeKB}KB)`
+        );
+        console.log(
+          `📐 Original dimensions: ${originalMetadata.width}x${
+            originalMetadata.height
+          } (${Math.round(megapixels * 10) / 10}MP)`
+        );
 
         // Generate unique filename
         const timestamp = Date.now();
@@ -216,21 +236,216 @@ const processValidatedImages = async (req, res, next) => {
         const filename = `${timestamp}-${randomString}.webp`;
         const filepath = path.join(uploadDir, filename);
 
-        // Process the image buffer
-        const processedBuffer = await processImage(file.buffer, {
-          quality: 85,
-          format: "webp",
-        });
+        // Smart compression logic based on 100KB threshold
+        const targetSizeBytes = 100 * 1024; // 100KB
+        const targetSizeKB = 100;
+        let processedBuffer;
+        let finalSize;
+        let compressionApplied = false;
+        let finalQuality = 100;
+
+        if (originalSize > targetSizeBytes) {
+          console.log(
+            `🎯 Starting SMART COMPRESSION: target ≤${targetSizeKB}KB (current: ${originalSizeKB}KB)`
+          );
+
+          // Predict optimal quality based on image characteristics
+          const compressionRatio = targetSizeBytes / originalSize;
+          let predictedQuality;
+
+          // Enhanced prediction algorithm
+          if (compressionRatio < 0.1) {
+            predictedQuality = 1;
+            console.log(
+              `🔥 Extreme compression needed (>90% reduction) → Starting at 1% quality`
+            );
+          } else if (megapixels > 20) {
+            predictedQuality = Math.max(
+              1,
+              Math.round(compressionRatio * 100 * 0.3)
+            );
+            console.log(
+              `📸 Very high resolution (${
+                Math.round(megapixels * 10) / 10
+              }MP) → Predicted quality: ${predictedQuality}%`
+            );
+          } else if (megapixels > 10) {
+            predictedQuality = Math.max(
+              1,
+              Math.round(compressionRatio * 100 * 0.5)
+            );
+            console.log(
+              `📸 High resolution (${
+                Math.round(megapixels * 10) / 10
+              }MP) → Predicted quality: ${predictedQuality}%`
+            );
+          } else if (originalSize > 5 * 1024 * 1024) {
+            predictedQuality = Math.max(
+              1,
+              Math.round(compressionRatio * 100 * 0.6)
+            );
+            console.log(
+              `📦 Very large file (${
+                Math.round((originalSize / (1024 * 1024)) * 10) / 10
+              }MB) → Predicted quality: ${predictedQuality}%`
+            );
+          } else {
+            predictedQuality = Math.max(
+              1,
+              Math.round(compressionRatio * 100 * 0.8)
+            );
+            console.log(
+              `📊 Standard compression → Predicted quality: ${predictedQuality}%`
+            );
+          }
+
+          // Hybrid Algorithm: Predictive Quality + Minimal Verification
+          let attempts = 0;
+          finalQuality = predictedQuality;
+
+          // Step 1: Test the prediction
+          attempts++;
+          console.log(
+            `🎯 Attempt ${attempts}: Testing predicted quality ${finalQuality}%...`
+          );
+
+          processedBuffer = await processImage(file.buffer, {
+            quality: finalQuality,
+            originalMetadata: originalMetadata,
+          });
+
+          finalSize = processedBuffer.length;
+          console.log(
+            `🎯 Attempt ${attempts} result: Quality ${finalQuality}% → ${Math.round(
+              finalSize / 1024
+            )}KB`
+          );
+
+          // Step 2: Fine-tuning loop - maximum 2 attempts
+          while (
+            finalSize > targetSizeBytes &&
+            finalQuality > 1 &&
+            attempts < 2
+          ) {
+            const deviation =
+              Math.abs(finalSize - targetSizeBytes) / targetSizeBytes;
+            console.log(
+              `🔧 Size ${Math.round(
+                finalSize / 1024
+              )}KB > target ${targetSizeKB}KB (deviation: ${Math.round(
+                deviation * 100
+              )}%), continuing compression...`
+            );
+
+            // Calculate more aggressive adjustment
+            const adjustmentFactor = targetSizeBytes / finalSize;
+            let adjustedQuality;
+
+            if (attempts === 1) {
+              // First adjustment: use standard formula
+              adjustedQuality = Math.max(
+                1,
+                Math.min(
+                  95,
+                  Math.round(finalQuality * Math.pow(adjustmentFactor, 0.5))
+                )
+              );
+            } else {
+              // Subsequent attempts: be more aggressive
+              adjustedQuality = Math.max(
+                1,
+                Math.round(finalQuality * adjustmentFactor * 0.8)
+              );
+            }
+
+            // Ensure we're making progress
+            if (adjustedQuality >= finalQuality) {
+              adjustedQuality = Math.max(1, finalQuality - 5);
+            }
+
+            if (adjustedQuality !== finalQuality) {
+              attempts++;
+              finalQuality = adjustedQuality;
+              console.log(
+                `🎯 Attempt ${attempts}: Trying quality ${finalQuality}%...`
+              );
+
+              processedBuffer = await processImage(file.buffer, {
+                quality: finalQuality,
+                originalMetadata: originalMetadata,
+              });
+
+              finalSize = processedBuffer.length;
+              console.log(
+                `🎯 Attempt ${attempts} result: Quality ${finalQuality}% → ${Math.round(
+                  finalSize / 1024
+                )}KB`
+              );
+            } else {
+              break;
+            }
+          }
+
+          compressionApplied = true;
+          const compressionPercentage = Math.round(
+            (1 - finalSize / originalSize) * 100
+          );
+          console.log(
+            `✅ SMART COMPRESSION complete: ${originalSize} → ${finalSize} bytes (${compressionPercentage}% reduction) in ${attempts} attempts`
+          );
+
+          // Final result analysis
+          if (finalSize > targetSizeBytes) {
+            if (finalQuality === 1) {
+              console.log(
+                `⚠️  Final size ${Math.round(
+                  finalSize / 1024
+                )}KB still exceeds target even at 1% quality (minimum). This is the absolute minimum achievable without resizing.`
+              );
+            } else {
+              console.log(
+                `⚠️  Final size ${Math.round(
+                  finalSize / 1024
+                )}KB still exceeds target. Stopped at ${finalQuality}% quality after ${attempts} attempts.`
+              );
+            }
+          } else {
+            console.log(
+              `🎉 TARGET ACHIEVED! Final size ${Math.round(
+                finalSize / 1024
+              )}KB ≤ ${targetSizeKB}KB at ${finalQuality}% quality.`
+            );
+          }
+        } else {
+          console.log(
+            `✅ File ≤ ${targetSizeKB}KB, uploading as-is (converting to WebP only)`
+          );
+
+          // Convert to WebP but keep original quality
+          processedBuffer = await processImage(file.buffer, {
+            quality: 100,
+            originalMetadata: originalMetadata,
+          });
+
+          finalSize = processedBuffer.length;
+          finalQuality = 100;
+          const reductionPercentage = Math.round(
+            (1 - finalSize / originalSize) * 100
+          );
+          console.log(
+            `✅ WebP conversion: ${originalSize} → ${finalSize} bytes (${reductionPercentage}% reduction)`
+          );
+        }
 
         // Save the processed buffer to disk
         await fs.writeFile(filepath, processedBuffer);
 
-        // Get the file size after processing
+        // Get the file size after processing (double-check)
         const stats = await fs.stat(filepath);
         const result = {
           size: stats.size,
-          compressed: true,
-          quality: 85,
+          compressed: compressionApplied,
+          quality: finalQuality,
           width: originalMetadata.width,
           height: originalMetadata.height,
         };
@@ -260,7 +475,7 @@ const processValidatedImages = async (req, res, next) => {
           quality: result.quality || 85,
           compressionApplied: result.compressed || false,
           // Add metadata from form data
-          altText: metadata.altText || `Property image ${i + 1}`,
+          altText: metadata.altText || `Image ${i + 1}`,
           order: metadata.order !== undefined ? parseInt(metadata.order) : i,
           isMain:
             metadata.isMain === "true" ||
@@ -274,8 +489,14 @@ const processValidatedImages = async (req, res, next) => {
         processedImages.push(processedImage);
 
         console.log(
-          `✅ Processed image ${i + 1}: ${file.originalname} → ${filename}`
+          `✅ PROCESSING COMPLETE for image ${i + 1}: ${
+            file.originalname
+          } → ${filename}`
         );
+        console.log(
+          `📊 FINAL STATS: ${processedImage.originalSize} → ${processedImage.size} bytes (${processedImage.compressionRatio}% reduction, quality: ${processedImage.quality}%)`
+        );
+        console.log(`🔗 Image URL: ${fullImageUrl}`);
       } catch (imageError) {
         console.error(`❌ Failed to process image ${i + 1}:`, imageError);
         return res.status(400).json({
@@ -287,6 +508,7 @@ const processValidatedImages = async (req, res, next) => {
 
     // Set the processed images on the request
     req.uploadedImages = processedImages;
+    req.processedImages = processedImages; // Also set for blog controller compatibility
     req.files = processedImages.map((img) => ({
       location: img.url,
       key: img.publicId, // This is now just the filename
@@ -302,15 +524,46 @@ const processValidatedImages = async (req, res, next) => {
       compressionApplied: img.compressionApplied,
     }));
 
-    // Log compression stats
+    // Log final compression summary
+    console.log(`\n🎉 === SMART COMPRESSION SUMMARY ===`);
+    const compressedImages = processedImages.filter(
+      (img) => img.compressionApplied
+    );
+    const asIsImages = processedImages.filter((img) => !img.compressionApplied);
+    const totalOriginalSize = processedImages.reduce(
+      (sum, img) => sum + img.originalSize,
+      0
+    );
+    const totalFinalSize = processedImages.reduce(
+      (sum, img) => sum + img.size,
+      0
+    );
+    const totalSavings = totalOriginalSize - totalFinalSize;
+    const overallCompressionRatio = Math.round(
+      (totalSavings / totalOriginalSize) * 100
+    );
+
+    console.log(`📊 Total images processed: ${processedImages.length}`);
+    console.log(`🗜️  Images compressed: ${compressedImages.length}`);
+    console.log(`✅ Images as-is (≤100KB): ${asIsImages.length}`);
+    console.log(
+      `📦 Original total size: ${Math.round(totalOriginalSize / 1024)}KB`
+    );
+    console.log(`📦 Final total size: ${Math.round(totalFinalSize / 1024)}KB`);
+    console.log(`💾 Total space saved: ${Math.round(totalSavings / 1024)}KB`);
+    console.log(`📈 Overall compression: ${overallCompressionRatio}%`);
+
     processedImages.forEach((img, index) => {
       const action = img.compressionApplied ? "COMPRESSED" : "AS-IS";
       console.log(
-        `📊 Image ${index + 1} [${action}]: ${img.originalSize} → ${
-          img.size
-        } bytes (${img.compressionRatio}% reduction, quality: ${img.quality}%)`
+        `   ${index + 1}. [${action}] ${img.originalName}: ${Math.round(
+          img.originalSize / 1024
+        )}KB → ${Math.round(img.size / 1024)}KB (${img.compressionRatio}%, Q:${
+          img.quality
+        }%)`
       );
     });
+    console.log(`🎉 === END COMPRESSION SUMMARY ===\n`);
 
     // Clean up pending images
     delete req.pendingImages;

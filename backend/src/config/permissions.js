@@ -19,6 +19,19 @@ const rolePermissions = {
       UpdateStatus: "any", // SuperAdmin can update user status (active/inactive)
       Delete: "any",
     },
+    blogs: {
+      Create: "any",
+      Read: "any",
+      Update: "any",
+      Delete: "any",
+    },
+    blogCategories: {
+      Create: "any",
+      Read: "any",
+      Update: "any",
+      Delete: "any",
+      Approve: "any", // SuperAdmin can approve/reject blog categories
+    },
   },
   admin: {
     properties: {
@@ -31,10 +44,28 @@ const rolePermissions = {
       Read: "own",
       Update: "own",
     },
+    blogs: {
+      Create: "any",
+      Read: "own", // Admin can read their own blogs + published blogs
+      Update: "own", // Admin can only update their own blogs
+      Delete: "own", // Admin can only delete their own blogs
+    },
+    blogCategories: {
+      Create: "any",
+      Read: "any",
+      Update: "own", // Admin can only update their own categories
+      Delete: "own", // Admin can only delete their own categories
+    },
   },
   visitor: {
     properties: {
       Read: "published_only",
+    },
+    blogs: {
+      Read: "published_only",
+    },
+    blogCategories: {
+      Read: "any",
     },
   },
 };
