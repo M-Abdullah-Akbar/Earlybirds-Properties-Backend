@@ -49,8 +49,7 @@ CORS_TROUBLESHOOTING.md
 .babelrc
 webpack.config.js
 
-# dist
-dist/
+
 
 # package-lock.json
 package-lock.json
