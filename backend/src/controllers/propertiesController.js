@@ -547,13 +547,125 @@ const getProperty = async (req, res) => {
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
+/**
+ * Helper function to clean property data before saving
+ * Removes empty strings and invalid values that would cause validation errors
+ */
+const cleanPropertyData = (data) => {
+  const cleaned = { ...data };
+
+  // Clean price - convert "NaN" or empty strings to undefined
+  if (
+    cleaned.price === "NaN" ||
+    cleaned.price === "" ||
+    cleaned.price === null
+  ) {
+    delete cleaned.price;
+  } else if (typeof cleaned.price === "string" && cleaned.price.trim() !== "") {
+    const parsedPrice = parseFloat(cleaned.price);
+    if (!isNaN(parsedPrice)) {
+      cleaned.price = parsedPrice;
+    } else {
+      delete cleaned.price;
+    }
+  }
+
+  // Keep enum fields as empty strings instead of deleting them
+  // This prevents Mongoose from applying any defaults
+  if (cleaned.listingType === "") {
+    cleaned.listingType = "";
+  }
+
+  if (cleaned.propertyType === "") {
+    cleaned.propertyType = "";
+  }
+
+  // Clean location fields
+  if (cleaned.location) {
+    if (cleaned.location.emirate === "") {
+      delete cleaned.location.emirate;
+    }
+    if (cleaned.location.area === "") {
+      delete cleaned.location.area;
+    }
+    if (cleaned.location.address === "") {
+      delete cleaned.location.address;
+    }
+    if (cleaned.location.neighborhood === "") {
+      delete cleaned.location.neighborhood;
+    }
+  }
+
+  // Keep title and description as empty strings instead of deleting them
+  // This prevents any defaults from being applied
+  if (cleaned.title === "") {
+    cleaned.title = "";
+  }
+
+  if (cleaned.description === "") {
+    cleaned.description = "";
+  }
+
+  // Clean details fields
+  if (cleaned.details) {
+    if (cleaned.details.bedrooms === "" || cleaned.details.bedrooms === null) {
+      delete cleaned.details.bedrooms;
+    }
+    if (
+      cleaned.details.bathrooms === "" ||
+      cleaned.details.bathrooms === null
+    ) {
+      delete cleaned.details.bathrooms;
+    }
+    if (cleaned.details.area === "" || cleaned.details.area === null) {
+      delete cleaned.details.area;
+    }
+    if (cleaned.details.floorLevel === "") {
+      delete cleaned.details.floorLevel;
+    }
+    if (
+      cleaned.details.totalFloors === "" ||
+      cleaned.details.totalFloors === null
+    ) {
+      delete cleaned.details.totalFloors;
+    }
+    if (cleaned.details.landArea === "" || cleaned.details.landArea === null) {
+      delete cleaned.details.landArea;
+    }
+    if (
+      cleaned.details.yearBuilt === "" ||
+      cleaned.details.yearBuilt === null
+    ) {
+      delete cleaned.details.yearBuilt;
+    }
+
+    // Clean parking fields
+    if (cleaned.details.parking) {
+      if (cleaned.details.parking.type === "") {
+        delete cleaned.details.parking.type;
+      }
+      if (
+        cleaned.details.parking.spaces === "" ||
+        cleaned.details.parking.spaces === null
+      ) {
+        delete cleaned.details.parking.spaces;
+      }
+    }
+  }
+
+  return cleaned;
+};
+
 const createPropertyWithImages = async (req, res) => {
   try {
     // ACL middleware has already verified admin permissions
-    const propertyData = {
+    let propertyData = {
       ...req.body,
       createdBy: req.user.id,
     };
+
+    // Clean the property data to remove empty strings and invalid values
+    propertyData = cleanPropertyData(propertyData);
 
     // Set approval status based on property status and user role
     // Draft properties should not be in approval workflow
@@ -587,25 +699,36 @@ const createPropertyWithImages = async (req, res) => {
       imageSource = "pre-processed";
       imageData = req.body.images;
     } else {
-      return res.status(400).json({
-        success: false,
-        error:
-          "At least one property image is required. Either upload image files or provide pre-processed image data.",
-      });
+      // Only require images for non-draft properties
+      if (propertyData.status !== "draft") {
+        return res.status(400).json({
+          success: false,
+          error:
+            "At least one property image is required. Either upload image files or provide pre-processed image data.",
+        });
+      }
+      // For draft properties, allow empty images array
+      imageData = [];
     }
 
-    propertyData.images = imageData.map((image, index) => {
-      return {
-        url: image.url, // Use image URL
-        publicId: image.publicId,
-        altText: image.altText || `Property image ${index + 1}`,
-        order: image.order !== undefined ? image.order : index,
-        isMain: image.isMain !== undefined ? image.isMain : index === 0,
-        originalName: image.originalName,
-        size: image.size,
-        format: image.format,
-      };
-    });
+    // Only process images if we have any
+    if (imageData.length > 0) {
+      propertyData.images = imageData.map((image, index) => {
+        return {
+          url: image.url, // Use image URL
+          publicId: image.publicId,
+          altText: image.altText || `Property image ${index + 1}`,
+          order: image.order !== undefined ? image.order : index,
+          isMain: image.isMain !== undefined ? image.isMain : index === 0,
+          originalName: image.originalName,
+          size: image.size,
+          format: image.format,
+        };
+      });
+    } else {
+      // For draft properties without images
+      propertyData.images = [];
+    }
 
     const property = new Property(propertyData);
     await property.save();
@@ -790,26 +913,26 @@ const updateProperty = async (req, res) => {
       // If changing FROM draft TO non-draft: needs approval (or auto-approve for SuperAdmin)
       if (currentStatus === "draft" && newStatus !== "draft") {
         if (req.user.role === "SuperAdmin") {
-          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
         } else {
-          updateOperation.$set.approvalStatus = "pending";
+          updateData.approvalStatus = "pending";
         }
         clearRejectionReason();
       }
       // If changing FROM non-draft TO draft: remove from approval workflow
       else if (currentStatus !== "draft" && newStatus === "draft") {
-        updateOperation.$set.approvalStatus = "not_applicable";
+        updateData.approvalStatus = "not_applicable";
         clearRejectionReason();
       }
       // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
       else if (currentStatus !== "draft" && newStatus !== "draft") {
         // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
         if (req.user.role === "admin") {
-          updateOperation.$set.approvalStatus = "pending";
+          updateData.approvalStatus = "pending";
           clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
-          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
           clearRejectionReason();
         }
@@ -819,10 +942,10 @@ const updateProperty = async (req, res) => {
       // If no status change but other property changes and not draft: reset to pending for admin (or auto-approve for SuperAdmin)
       if (existingProperty.status !== "draft") {
         if (req.user.role === "admin") {
-          updateOperation.$set.approvalStatus = "pending";
+          updateData.approvalStatus = "pending";
           clearRejectionReason();
         } else if (req.user.role === "SuperAdmin") {
-          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
+          updateData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
           // updatedBy and updatedAt will be set automatically
           clearRejectionReason();
         }
@@ -941,8 +1064,12 @@ const updateProperty = async (req, res) => {
         }));
       }
 
-      // Validate that at least one image remains after update
-      if (finalImages.length === 0) {
+      // Validate that at least one image remains after update (except for draft properties)
+      if (
+        finalImages.length === 0 &&
+        updateData.status !== "draft" &&
+        existingProperty.status !== "draft"
+      ) {
         return res.status(400).json({
           success: false,
           error: "At least one image is required",
@@ -964,8 +1091,11 @@ const updateProperty = async (req, res) => {
       console.log("📷 No image changes requested, keeping existing images");
     }
 
+    // Clean the update data to remove empty strings and invalid values
+    const cleanedUpdateData = cleanPropertyData(updateData);
+
     // Update the existing property object and save it to trigger pre-save hooks
-    Object.assign(existingProperty, updateData);
+    Object.assign(existingProperty, cleanedUpdateData);
 
     // Save the property to trigger pre-save hooks (including slug generation)
     const property = await existingProperty.save();
@@ -1276,364 +1406,6 @@ const setMainPropertyImage = async (req, res) => {
   }
 };
 
-/**
- * Create property without images (for properties that don't have images)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-const createPropertyWithoutImages = async (req, res) => {
-  try {
-    // ACL middleware has already verified admin permissions
-    const propertyData = {
-      ...req.body,
-      createdBy: req.user.id,
-      images: [], // No images for this route
-    };
-
-    // Set approval status based on property status and user role
-    // Draft properties should not be in approval workflow
-    if (propertyData.status === "draft") {
-      propertyData.approvalStatus = "not_applicable"; // Draft properties are not in approval workflow
-    } else {
-      // SuperAdmin properties are automatically approved, others need approval
-      if (req.user.role === "SuperAdmin") {
-        propertyData.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-        propertyData.updatedBy = req.user.id; // Set who approved it
-        propertyData.updatedAt = new Date(); // Set when it was approved
-      } else {
-        propertyData.approvalStatus = "pending"; // Non-draft properties need approval
-      }
-    }
-
-    const property = new Property(propertyData);
-    await property.save();
-
-    // Prepare response object
-    const response = {
-      success: true,
-      data: {
-        property,
-      },
-      message: "Property created successfully without images",
-    };
-
-    // Add warnings if any exist
-    if (req.validationWarnings && req.validationWarnings.length > 0) {
-      response.warnings = req.validationWarnings;
-    }
-
-    res.status(201).json(response);
-  } catch (error) {
-    console.error("Error creating property without images:", error);
-
-    // Handle MongoDB duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      const value = error.keyValue[field];
-
-      // Provide user-friendly error messages
-      let userFriendlyField = field;
-      let userFriendlyMessage = `${
-        field.charAt(0).toUpperCase() + field.slice(1)
-      } already exists`;
-
-      if (field === "slug") {
-        userFriendlyField = "title"; // Map slug errors to title field for frontend
-        userFriendlyMessage =
-          "A property with this title already exists. Please choose a different title.";
-      }
-
-      const errorResponse = {
-        success: false,
-        error: `Property with this ${
-          field === "slug" ? "title" : field
-        } already exists`,
-        details: [
-          {
-            field: userFriendlyField,
-            message: userFriendlyMessage,
-          },
-        ],
-      };
-
-      return res.status(400).json(errorResponse);
-    }
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err) => err.message);
-      return res.status(400).json({
-        success: false,
-        error: "Validation failed",
-        details: errors,
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      error: "Failed to create property without images",
-    });
-  }
-};
-
-/**
- * Update property without modifying images (for properties that don't need image changes)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-const updatePropertyWithoutImages = async (req, res) => {
-  try {
-    // ACL middleware has already verified admin permissions
-    const { id } = req.params;
-
-    // Get existing property
-    let existingProperty;
-    if (id.match(/^[0-9a-fA-F]{24}$/)) {
-      existingProperty = await Property.findById(id);
-    } else {
-      existingProperty = await Property.findOne({ slug: id });
-    }
-
-    if (!existingProperty) {
-      return res.status(404).json({
-        success: false,
-        error: "Property not found",
-      });
-    }
-
-    // Check ownership for admin users (SuperAdmin can update any property)
-    if (req.requireOwnership && req.userRole === "admin") {
-      const ownerId = existingProperty.createdBy?.toString();
-
-      if (ownerId !== req.user.id.toString()) {
-        return res.status(403).json({
-          success: false,
-          error: "Access denied - You can only update properties you created",
-        });
-      }
-    }
-
-    const propertyData = req.body;
-    console.log("=== UPDATE PROPERTY WITHOUT IMAGES DEBUG ===");
-    console.log("Received emirate:", propertyData.location?.emirate);
-    console.log(
-      "Received area:",
-      propertyData.location?.area,
-      "(type:",
-      typeof propertyData.location?.area,
-      ")"
-    );
-    console.log("Existing emirate:", existingProperty.location?.emirate);
-    console.log("Existing area:", existingProperty.location?.area);
-    console.log(
-      "✅ Using property data from req.body:",
-      Object.keys(propertyData)
-    );
-
-    // Validate status transitions if status is being updated
-    if (
-      propertyData.status &&
-      propertyData.status !== existingProperty.status
-    ) {
-      const currentStatus = existingProperty.status;
-      const newStatus = propertyData.status;
-
-      // Validate status transitions using the same logic as frontend
-      const allowedStatuses = getValidStatusTransitions(
-        currentStatus,
-        existingProperty.previousStatus
-      );
-
-      if (!allowedStatuses.includes(newStatus)) {
-        return res.status(400).json({
-          success: false,
-          error: `Invalid status transition: Cannot change status from '${currentStatus}' to '${newStatus}'`,
-          details: {
-            currentStatus,
-            attemptedStatus: newStatus,
-            allowedTransitions: allowedStatuses,
-          },
-        });
-      }
-
-      // Track previous status when archiving
-      if (newStatus === "archived" && currentStatus !== "archived") {
-        propertyData.previousStatus = currentStatus;
-      }
-      // Clear previous status when unarchiving
-      else if (currentStatus === "archived" && newStatus !== "archived") {
-        propertyData.previousStatus = undefined;
-      }
-    }
-
-    // Handle empty string values for price field - use $unset to remove when empty
-    const processedData = { ...propertyData };
-    let updateOperation = {};
-    
-    // Store the original price value before potentially deleting it
-    const originalPrice = processedData.price;
-    
-    if (processedData.price === "") {
-      // Remove price from the update data and use $unset to clear it
-      delete processedData.price;
-      updateOperation = {
-        $set: {
-          ...processedData,
-          updatedBy: req.user.id,
-          images: existingProperty.images,
-        },
-        $unset: {
-          price: 1 // Remove the price field entirely
-        }
-      };
-    } else {
-      updateOperation = {
-        $set: {
-          ...processedData,
-          updatedBy: req.user.id,
-          images: existingProperty.images,
-        }
-      };
-    }
-
-    // Helper function to clear rejection reason
-    const clearRejectionReason = () => {
-      if (existingProperty.rejectionReason !== undefined) {
-        existingProperty.rejectionReason = undefined;
-      }
-    };
-
-    // Handle approval status based on status changes and user role
-    if (propertyData.status !== undefined) {
-      const currentStatus = existingProperty.status;
-      const newStatus = propertyData.status;
-
-      // If changing FROM draft TO non-draft: needs approval (or auto-approve for SuperAdmin)
-      if (currentStatus === "draft" && newStatus !== "draft") {
-        if (req.user.role === "SuperAdmin") {
-          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-          // updatedBy and updatedAt will be set automatically
-        } else {
-          updateOperation.$set.approvalStatus = "pending";
-        }
-        clearRejectionReason();
-      }
-      // If changing FROM non-draft TO draft: remove from approval workflow
-      else if (currentStatus !== "draft" && newStatus === "draft") {
-        updateOperation.$set.approvalStatus = "not_applicable";
-        clearRejectionReason();
-      }
-      // If staying non-draft and making other changes: reset to pending for re-approval (or auto-approve for SuperAdmin)
-      else if (currentStatus !== "draft" && newStatus !== "draft") {
-        // Only reset to pending if this is an admin making changes (SuperAdmin gets auto-approved)
-        if (req.user.role === "admin") {
-          updateOperation.$set.approvalStatus = "pending";
-          clearRejectionReason();
-        } else if (req.user.role === "SuperAdmin") {
-          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-          // updatedBy and updatedAt will be set automatically
-          clearRejectionReason();
-        }
-      }
-      // If staying draft: keep current approval status (should be "not_applicable")
-    } else {
-      // If no status change but other property changes and not draft: reset to pending for admin (or auto-approve for SuperAdmin)
-      if (existingProperty.status !== "draft") {
-        if (req.user.role === "admin") {
-          updateOperation.$set.approvalStatus = "pending";
-          clearRejectionReason();
-        } else if (req.user.role === "SuperAdmin") {
-          updateOperation.$set.approvalStatus = "approved"; // SuperAdmin properties are auto-approved
-          // updatedBy and updatedAt will be set automatically
-          clearRejectionReason();
-        }
-      }
-    }
-
-    // Update the property without modifying images
-    // Disable validation when using $unset to avoid required field validation errors
-    // For off-plan properties, price is not required so we can always run validators
-    // For non-off-plan properties, disable validators only when explicitly clearing price (empty string)
-    const currentListingType = processedData.listingType || existingProperty.listingType;
-    const shouldRunValidators = currentListingType === "off plan" || 
-                               (currentListingType !== "off plan" && originalPrice !== "");
-    
-    const updateOptions = {
-      new: true,
-      runValidators: shouldRunValidators,
-    };
-    
-    const updatedProperty = await Property.findByIdAndUpdate(
-      existingProperty._id,
-      updateOperation,
-      updateOptions
-    ).populate("createdBy", "name email");
-
-    if (!updatedProperty) {
-      return res.status(404).json({
-        success: false,
-        error: "Property not found after update",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: { property: updatedProperty },
-      message: "Property updated successfully without modifying images",
-    });
-  } catch (error) {
-    console.error("Error updating property without images:", error);
-
-    // Handle MongoDB duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      const value = error.keyValue[field];
-
-      // Provide user-friendly error messages
-      let userFriendlyField = field;
-      let userFriendlyMessage = `${
-        field.charAt(0).toUpperCase() + field.slice(1)
-      } already exists`;
-
-      if (field === "slug") {
-        userFriendlyField = "title"; // Map slug errors to title field for frontend
-        userFriendlyMessage =
-          "A property with this title already exists. Please choose a different title.";
-      }
-
-      const errorResponse = {
-        success: false,
-        error: `Property with this ${
-          field === "slug" ? "title" : field
-        } already exists`,
-        details: [
-          {
-            field: userFriendlyField,
-            message: userFriendlyMessage,
-          },
-        ],
-      };
-
-      return res.status(400).json(errorResponse);
-    }
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err) => err.message);
-      return res.status(400).json({
-        success: false,
-        error: "Validation failed",
-        details: errors,
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      error: "Failed to update property without images",
-    });
-  }
-};
-
 module.exports = {
   getAreasForEmirate,
   getAmenitiesForPropertyType,
@@ -1641,9 +1413,7 @@ module.exports = {
   getProperties,
   getProperty,
   createPropertyWithImages,
-  createPropertyWithoutImages,
   updateProperty,
-  updatePropertyWithoutImages,
   deleteProperty,
   deletePropertyImage,
   setMainPropertyImage,

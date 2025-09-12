@@ -70,6 +70,8 @@ const userSchema = new mongoose.Schema(
 // Index for better query performance
 userSchema.index({ username: 1 });
 userSchema.index({ email: 1 });
+userSchema.index({ name: 1 });
+userSchema.index({ role: 1 });
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
@@ -94,13 +96,6 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 
 // Generate JWT token
 userSchema.methods.generateAuthToken = function () {
-  const expiresIn = process.env.JWT_EXPIRE;
-  console.log('JWT_EXPIRE value:', expiresIn);
-  
-  if (!expiresIn) {
-    throw new Error('JWT_EXPIRE environment variable is not set. Please configure it in your deployment environment.');
-  }
-  
   return jwt.sign(
     {
       id: this._id,
@@ -110,7 +105,7 @@ userSchema.methods.generateAuthToken = function () {
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: expiresIn, // Fallback to 24h if not set
+      expiresIn: process.env.JWT_EXPIRE, // Shorter expiry for admin
     }
   );
 };

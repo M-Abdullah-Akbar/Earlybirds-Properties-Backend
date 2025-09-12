@@ -158,8 +158,8 @@ const sendPropertyInquiryEmail = async (req, res) => {
           </div>
           
           <p>If you have any urgent questions, please don't hesitate to contact us directly:</p>
-          <p><strong>Phone:</strong> +971 50 123 4567</p>
-          <p><strong>Email:</strong> info@earlybirds.ae</p>
+          <p><strong>Phone:</strong> +971 561615675</p>
+          <p><strong>Email:</strong> info@earlybirdsproperties.com</p>
           
           <p>Best regards,<br>EarlyBirds Properties Team</p>
           

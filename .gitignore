@@ -10,7 +10,6 @@ backend/src/SampleJPGImage_10mbmb.jpg
 
 # Environment variables
 backend/.env
-.env
 
 # Logs
 *.log
