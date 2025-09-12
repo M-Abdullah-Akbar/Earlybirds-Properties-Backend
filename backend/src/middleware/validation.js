@@ -1,4 +1,4 @@
-const { body, query, param, validationResult } = require("express-validator");
+﻿const { body, query, param, validationResult } = require("express-validator");
 const multer = require("multer");
 const {
   EMIRATE_AREA_MAP,
@@ -320,14 +320,21 @@ const cleanupParkingFields = (req, res, next) => {
 const validateCreateProperty = [
   // Basic property information
   body("title")
+    .optional()
     .custom((title, { req }) => {
-      // Check if title is required (empty string check)
-      if (title === "") {
-        throw new Error("Property title is required");
+      // If title is not provided, skip validation
+      if (!title || title === null || title === undefined) {
+        return true;
       }
+
+      // If title is empty string, that's also valid (optional field)
+      if (title === "") {
+        return true;
+      }
+
       title = title.trim();
 
-      // Length validation
+      // Length validation (only if title is provided)
       if (title.length < 5) {
         throw new Error("Title must be at least 5 characters long");
       } else if (title.length > 200) {
@@ -365,136 +372,184 @@ const validateCreateProperty = [
       return true;
     }),
 
-  body("description").custom((description, { req }) => {
-    // Check if description is required (empty string check)
-    if (description === "") {
-      throw new Error("Property description is required");
-    } // Trim the description
-    description = description.trim();
+  body("description")
+    .optional()
+    .custom((description, { req }) => {
+      // If description is not provided, skip validation
+      if (!description || description === null || description === undefined) {
+        return true;
+      }
 
-    // Length validation
-    if (description.length < 200) {
-      throw new Error("Description must be at least 200 characters long");
-    } else if (description.length > 10000) {
-      throw new Error("Description cannot exceed 10000 characters");
-    } // Update the request body with the trimmed description
-    req.body.description = description;
-    return true;
-  }),
+      // If description is empty string, that's also valid (optional field)
+      if (description === "") {
+        return true;
+      }
+
+      // Trim the description
+      description = description.trim();
+
+      // Length validation (only if description is provided)
+      if (description.length < 200) {
+        throw new Error("Description must be at least 200 characters long");
+      } else if (description.length > 10000) {
+        throw new Error("Description cannot exceed 10000 characters");
+      } // Update the request body with the trimmed description
+      req.body.description = description;
+      return true;
+    }),
 
   // Property type validation
-  body("propertyType").custom((propertyType, { req }) => {
-    // Check if propertyType is null or undefined
-    if (propertyType == "") {
-      throw new Error("Property type is required");
-    } // Must be string
-    else if (typeof propertyType !== "string") {
-      throw new Error("Property type must be a string");
-    } // Format validation
-    else if (
-      !/^[a-zA-Z0-9\s-]+$/.test(propertyType) ||
-      propertyType.trim() !== propertyType ||
-      propertyType.includes("  ")
-    ) {
-      throw new Error(
-        `Invalid property type format: "${propertyType}". Must contain only letters, numbers, spaces, and hyphens, with no leading/trailing spaces.`
-      );
-    } else {
-      return true;
-    }
-  }),
+  body("propertyType")
+    .optional()
+    .custom((propertyType, { req }) => {
+      // If propertyType is not provided, skip validation
+      if (
+        !propertyType ||
+        propertyType === null ||
+        propertyType === undefined
+      ) {
+        return true;
+      }
 
-  // Optional price validation - only validates when data is present
-  body("price").optional().custom((price, { req }) => {
-    const listingType = req.body.listingType;
-    
-    // Skip validation for "off plan" listing type
-    if (listingType === "off plan") {
-      return true;
-    }
-    
-    // If price is provided, validate it
-    if (price !== undefined && price !== null && price !== "") {
+      // If propertyType is empty string, that's also valid (optional field)
+      if (propertyType === "") {
+        return true;
+      }
+
+      // Must be string
+      if (typeof propertyType !== "string") {
+        throw new Error("Property type must be a string");
+      } // Format validation
+      else if (
+        !/^[a-zA-Z0-9\s-]+$/.test(propertyType) ||
+        propertyType.trim() !== propertyType ||
+        propertyType.includes("  ")
+      ) {
+        throw new Error(
+          `Invalid property type format: "${propertyType}". Must contain only letters, numbers, spaces, and hyphens, with no leading/trailing spaces.`
+        );
+      } else {
+        return true;
+      }
+    }),
+
+  body("price")
+    .optional()
+    .custom((price, { req }) => {
+      // Skip price validation for "off plan" listing type
+      if (req.body.listingType === "off plan") {
+        return true;
+      }
+
+      // If price is not provided, skip validation (now optional)
+      if (
+        price === null ||
+        price === undefined ||
+        price === "" ||
+        price === "NaN"
+      ) {
+        return true;
+      }
+
+      // Convert to number and validate it's a positive float
       const numPrice = parseFloat(price);
-      if (isNaN(numPrice) || numPrice <= 0) {
+      if (isNaN(numPrice) || numPrice < 0) {
         throw new Error("Price must be a positive number");
       }
+
       // Update the request body with the parsed number
       req.body.price = numPrice;
-    }
-    
-    return true;
-  }),
+
+      return true;
+    }),
 
   // Location validation
 
-  body("location.address").custom((address, { req }) => {
-    // Check if address is required (empty string check)
-    if (!address || address.trim() === "") {
-      throw new Error("Address is required");
-    }
+  body("location.address")
+    .optional()
+    .custom((address, { req }) => {
+      // If address is not provided, skip validation
+      if (!address || address === null || address === undefined) {
+        return true;
+      }
 
-    // Trim the address
-    address = address.trim();
+      // If address is empty string, that's also valid (optional field)
+      if (address === "") {
+        return true;
+      }
 
-    // Length validation
-    if (address.length < 5) {
-      throw new Error("Address must be at least 5 characters long");
-    } else if (address.length > 200) {
-      throw new Error("Address cannot exceed 200 characters");
-    }
+      // Trim the address
+      address = address.trim();
 
-    // Update the request body with the trimmed address
-    req.body.location.address = address;
-    return true;
-  }),
+      // Length validation (only if address is provided)
+      if (address.length < 5) {
+        throw new Error("Address must be at least 5 characters long");
+      } else if (address.length > 200) {
+        throw new Error("Address cannot exceed 200 characters");
+      }
 
-  body("location.emirate").notEmpty().withMessage("Emirate is required"),
+      // Update the request body with the trimmed address
+      req.body.location.address = address;
+      return true;
+    }),
 
-  body("location.area").custom((value, { req }) => {
-    // Check if area is required (empty string check)
-    if (value === "") {
-      throw new Error("Location area is required");
-    }
+  body("location.emirate").optional(),
 
-    const emirate = req.body.location?.emirate;
-    if (!emirate) {
-      throw new Error("Emirate must be selected before area");
-    }
-    return true;
-  }),
+  body("location.area")
+    .optional()
+    .custom((value, { req }) => {
+      // If area is not provided, skip validation
+      if (value === null || value === undefined || value === "") {
+        return true;
+      }
+
+      const emirate = req.body.location?.emirate;
+      if (!emirate) {
+        throw new Error("Emirate must be selected before area");
+      }
+      return true;
+    }),
 
   // Property details validation
 
-  // Optional bedrooms validation - only validates when data is present
-  body("details.bedrooms").optional().custom((bedrooms, { req }) => {
-    const propertyType = req.body.propertyType;
+  body("details.bedrooms")
+    .optional()
+    .custom((bedrooms, { req }) => {
+      const propertyType = req.body.propertyType;
 
-    // For studio and office property types, bedrooms should not be provided
-    if (propertyType === "studio" || propertyType === "office") {
-      // If bedrooms field exists and has a value, reject it
-      if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
-        throw new Error(
-          `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
-        );
+      // For studio and office property types, bedrooms should not be provided
+      if (propertyType === "studio" || propertyType === "office") {
+        // If bedrooms field exists (not null and not undefined), reject it
+        if (bedrooms !== null && bedrooms !== undefined && bedrooms !== "") {
+          throw new Error(
+            `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
+          );
+        }
+        // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
+        return true;
       }
-      return true;
-    }
-    
-    // If bedrooms is provided, validate it
-    if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
+
+      // For all other property types, bedrooms are now optional
+      if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
+        return true;
+      }
+
       if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
         throw new Error("Bedrooms must be a non-negative integer");
       }
-    }
 
-    return true;
-  }),
+      return true;
+    }),
 
-  // Optional bathrooms validation - only validates when data is present
-  body("details.bathrooms").optional().custom((bathrooms, { req }) => {
-    // If bathrooms is provided, validate it
-    if (bathrooms !== undefined && bathrooms !== null && bathrooms !== "") {
+  body("details.bathrooms")
+    .optional()
+    .custom((bathrooms, { req }) => {
+      // If bathrooms is not provided, skip validation (now optional)
+      if (bathrooms === null || bathrooms === undefined || bathrooms === "") {
+        return true;
+      }
+
+      // Convert to number and validate it's a non-negative integer
       const numBathrooms = parseInt(bathrooms);
       if (
         isNaN(numBathrooms) ||
@@ -503,121 +558,133 @@ const validateCreateProperty = [
       ) {
         throw new Error("Bathrooms must be a non-negative integer");
       }
+
       // Update the request body with the parsed number
       req.body.details.bathrooms = numBathrooms;
-    }
 
-    return true;
-  }),
+      return true;
+    }),
 
-  // Optional area validation - only validates when data is present
-  body("details.area").optional().custom((area, { req }) => {
-    // If area is provided, validate it
-    if (area !== undefined && area !== null && area !== "") {
+  body("details.area")
+    .optional()
+    .custom((area, { req }) => {
+      // If area is not provided, skip validation (now optional)
+      if (area === null || area === undefined || area === "") {
+        return true;
+      }
+
+      // Convert to number and validate it's a positive float
       const numArea = parseFloat(area);
       if (isNaN(numArea) || numArea <= 0) {
         throw new Error("Property area must be a positive number");
       }
-      if (numArea > 50000) {
-        throw new Error("Property area cannot exceed 50,000 square feet");
-      }
+
       // Update the request body with the parsed number
       req.body.details.area = numArea;
-    }
 
-    return true;
-  }),
-
-  body("details.totalFloors").custom((totalFloors, { req }) => {
-    // If totalFloors is not provided (null, undefined, empty string), it's optional
-    if (totalFloors === null || totalFloors === undefined) {
       return true;
-    }
+    }),
 
-    // If provided, validate that it's a positive integer
-    if (!Number.isInteger(Number(totalFloors)) || Number(totalFloors) <= 0) {
-      throw new Error("Total floors must be a positive integer greater than 0");
-    }
+  body("details.totalFloors")
+    .optional()
+    .custom((totalFloors, { req }) => {
+      // If totalFloors is not provided (null, undefined, empty string), it's optional
+      if (totalFloors === null || totalFloors === undefined) {
+        return true;
+      }
 
-    return true;
-  }),
-
-  body("details.floorLevel").custom((floorLevel, { req }) => {
-    const propertyType = req.body.propertyType;
-
-    // For villa, townhouse, and penthouse property types, floorLevel should NOT be provided
-    if (propertyType === "villa" || propertyType === "townhouse") {
-      // If floorLevel field exists (not null/undefined) and has a value, reject it
-      if (floorLevel !== undefined && floorLevel !== "") {
+      // If provided, validate that it's a positive integer
+      if (!Number.isInteger(Number(totalFloors)) || Number(totalFloors) <= 0) {
         throw new Error(
-          `Floor level field is not applicable for ${propertyType} property type. Please remove this field.`
+          "Total floors must be a positive integer greater than 0"
         );
       }
-      // If floorLevel is null/undefined/empty, that's perfectly fine
+
       return true;
-    }
+    }),
 
-    // For all other property types, floorLevel is optional
-    // No additional validation needed for floorLevel as it's a text field
-    return true;
-  }),
+  body("details.floorLevel")
+    .optional()
+    .custom((floorLevel, { req }) => {
+      const propertyType = req.body.propertyType;
 
-  body("details.landArea").custom((landArea, { req }) => {
-    const propertyType = req.body.propertyType;
-
-    // For apartment, penthouse, and studio property types, landArea should NOT be provided
-    if (
-      propertyType === "apartment" ||
-      propertyType === "penthouse" ||
-      propertyType === "studio"
-    ) {
-      // If landArea field exists (not null/undefined) and has a value, reject it
-      if (landArea !== null && landArea !== undefined && landArea !== "") {
-        throw new Error(
-          `Land area field is not applicable for ${propertyType} property type. Please remove this field.`
-        );
+      // For villa, townhouse, and penthouse property types, floorLevel should NOT be provided
+      if (propertyType === "villa" || propertyType === "townhouse") {
+        // If floorLevel field exists (not null/undefined) and has a value, reject it
+        if (floorLevel !== undefined && floorLevel !== "") {
+          throw new Error(
+            `Floor level field is not applicable for ${propertyType} property type. Please remove this field.`
+          );
+        }
+        // If floorLevel is null/undefined/empty, that's perfectly fine
+        return true;
       }
-      // If landArea is null or undefined (field not sent or explicitly null), that's perfectly fine
+
+      // For all other property types, floorLevel is optional
+      // No additional validation needed for floorLevel as it's a text field
       return true;
-    }
+    }),
 
-    // For villa, townhouse, and office property types, landArea is optional
-    if (landArea === null || landArea === undefined || landArea === "") {
+  body("details.landArea")
+    .optional()
+    .custom((landArea, { req }) => {
+      const propertyType = req.body.propertyType;
+
+      // For apartment, penthouse, and studio property types, landArea should NOT be provided
+      if (
+        propertyType === "apartment" ||
+        propertyType === "penthouse" ||
+        propertyType === "studio"
+      ) {
+        // If landArea field exists (not null/undefined) and has a value, reject it
+        if (landArea !== null && landArea !== undefined && landArea !== "") {
+          throw new Error(
+            `Land area field is not applicable for ${propertyType} property type. Please remove this field.`
+          );
+        }
+        // If landArea is null or undefined (field not sent or explicitly null), that's perfectly fine
+        return true;
+      }
+
+      // For villa, townhouse, and office property types, landArea is optional
+      if (landArea === null || landArea === undefined || landArea === "") {
+        return true;
+      }
+
+      const numLandArea = parseFloat(landArea);
+      if (isNaN(numLandArea) || numLandArea < 0) {
+        throw new Error("Land area must be a positive number");
+      }
+
+      // Update the request body with the parsed number
+      req.body.details.landArea = numLandArea;
+
       return true;
-    }
+    }),
 
-    const numLandArea = parseFloat(landArea);
-    if (isNaN(numLandArea) || numLandArea < 0) {
-      throw new Error("Land area must be a positive number");
-    }
+  body("details.yearBuilt")
+    .optional()
+    .custom((yearBuilt) => {
+      // If yearBuilt is not provided (null, undefined, empty string), it's optional
+      if (yearBuilt === null || yearBuilt === "" || yearBuilt === undefined) {
+        return true;
+      }
 
-    // Update the request body with the parsed number
-    req.body.details.landArea = numLandArea;
+      // If provided, validate the range
+      const currentYear = new Date().getFullYear();
+      const minYear = 1990;
+      const maxYear = currentYear + 2;
 
-    return true;
-  }),
+      if (
+        !Number.isInteger(Number(yearBuilt)) ||
+        Number(yearBuilt) < minYear ||
+        Number(yearBuilt) > maxYear
+      ) {
+        throw new Error(`Year built must be between ${minYear} and ${maxYear}`);
+      }
 
-  body("details.yearBuilt").custom((yearBuilt) => {
-    // If yearBuilt is not provided (null, undefined, empty string), it's optional
-    if (yearBuilt === null || yearBuilt === "" || yearBuilt === undefined) {
       return true;
-    }
-
-    // If provided, validate the range
-    const currentYear = new Date().getFullYear();
-    const minYear = 1990;
-    const maxYear = currentYear + 2;
-
-    if (
-      !Number.isInteger(Number(yearBuilt)) ||
-      Number(yearBuilt) < minYear ||
-      Number(yearBuilt) > maxYear
-    ) {
-      throw new Error(`Year built must be between ${minYear} and ${maxYear}`);
-    }
-
-    return true;
-  }),
+    }),
 
   // Amenities validation
   body("amenities")
@@ -725,147 +792,152 @@ const validateCreateProperty = [
     }),
 
   // Images validation - comprehensive validation for all image fields
-  body("images").custom((images, { req }) => {
-    // Check if images are provided (either as processed images or uploaded files)
-    const hasUploadedFiles = req.files && req.files.length > 0;
-    const hasProcessedImages =
-      images && Array.isArray(images) && images.length > 0;
+  body("images")
+    .optional()
+    .custom((images, { req }) => {
+      // Check if images are provided (either as processed images or uploaded files)
+      const hasUploadedFiles = req.files && req.files.length > 0;
+      const hasProcessedImages =
+        images && Array.isArray(images) && images.length > 0;
 
-    if (!hasUploadedFiles && !hasProcessedImages) {
-      throw new Error("At least one image is required");
-    }
-
-    // If we have uploaded files but no processed images, skip further validation
-    // (images will be processed after validation passes)
-    if (hasUploadedFiles && !hasProcessedImages) {
-      return true;
-    }
-
-    // Check array length
-    if (images.length > 10) {
-      throw new Error("Must have between 1 and 10 images");
-    }
-
-    let mainImageCount = 0;
-    const orders = [];
-    const urls = [];
-    const publicIds = [];
-
-    for (let i = 0; i < images.length; i++) {
-      const image = images[i];
-      const imageIndex = i + 1;
-
-      // Required fields validation
-      if (!image.url) {
-        throw new Error(`Image ${imageIndex}: URL is required`);
+      // Images are now optional - allow properties with no images
+      if (!hasUploadedFiles && !hasProcessedImages) {
+        return true;
       }
 
-      if (!image.publicId) {
-        throw new Error(`Image ${imageIndex}: Public ID is required`);
+      // If we have uploaded files but no processed images, skip further validation
+      // (images will be processed after validation passes)
+      if (hasUploadedFiles && !hasProcessedImages) {
+        return true;
       }
 
-      // URL format validation - handle both regular URLs and local URLs
-      const urlRegex = /^https?:\/\/.+(\.(jpg|jpeg|png|webp)|\/[^\/]+)$/i;
-
-      if (!urlRegex.test(image.url) && !validateImageUrl(image.url)) {
-        throw new Error(
-          `Image ${imageIndex}: URL must be a valid HTTP/HTTPS URL ending with jpg, jpeg, png, webp, or a valid local upload URL`
-        );
+      // Check array length
+      if (images.length > 10) {
+        throw new Error("Must have between 1 and 10 images");
       }
 
-      if (image.publicId.length > 100) {
-        throw new Error(
-          `Image ${imageIndex}: Public ID cannot exceed 100 characters`
-        );
-      }
+      let mainImageCount = 0;
+      const orders = [];
+      const urls = [];
+      const publicIds = [];
 
-      // Order validation
-      if (image.order !== undefined) {
-        if (
-          !Number.isInteger(image.order) ||
-          image.order < 0 ||
-          image.order > 10
-        ) {
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        const imageIndex = i + 1;
+
+        // Required fields validation
+        if (!image.url) {
+          throw new Error(`Image ${imageIndex}: URL is required`);
+        }
+
+        if (!image.publicId) {
+          throw new Error(`Image ${imageIndex}: Public ID is required`);
+        }
+
+        // URL format validation - handle both regular URLs and local URLs
+        const urlRegex = /^https?:\/\/.+(\.(jpg|jpeg|png|webp)|\/[^\/]+)$/i;
+
+        if (!urlRegex.test(image.url) && !validateImageUrl(image.url)) {
           throw new Error(
-            `Image ${imageIndex}: Order must be an integer between 0 and 10`
+            `Image ${imageIndex}: URL must be a valid HTTP/HTTPS URL ending with jpg, jpeg, png, webp, or a valid local upload URL`
           );
         }
-        orders.push(image.order);
+
+        if (image.publicId.length > 100) {
+          throw new Error(
+            `Image ${imageIndex}: Public ID cannot exceed 100 characters`
+          );
+        }
+
+        // Order validation
+        if (image.order !== undefined) {
+          if (
+            !Number.isInteger(image.order) ||
+            image.order < 0 ||
+            image.order > 10
+          ) {
+            throw new Error(
+              `Image ${imageIndex}: Order must be an integer between 0 and 10`
+            );
+          }
+          orders.push(image.order);
+        }
+
+        // isMain validation
+        if (image.isMain === true) {
+          mainImageCount++;
+        }
+
+        // Duplicate URL check
+        if (urls.includes(image.url)) {
+          throw new Error(`Image ${imageIndex}: Duplicate image URL found`);
+        }
+        urls.push(image.url);
+
+        // Duplicate publicId check
+        if (publicIds.includes(image.publicId)) {
+          throw new Error(`Image ${imageIndex}: Duplicate public ID found`);
+        }
+        publicIds.push(image.publicId);
+
+        // Alt text format validation (if provided)
+        if (image.altText && image.altText.trim() !== image.altText) {
+          throw new Error(
+            `Image ${imageIndex}: Alt text cannot have leading or trailing spaces`
+          );
+        }
+
+        // Public ID format validation (basic)
+        if (!/^[a-zA-Z0-9_\-\/]+$/.test(image.publicId)) {
+          throw new Error(
+            `Image ${imageIndex}: Public ID can only contain letters, numbers, underscores, hyphens, and forward slashes`
+          );
+        }
       }
 
-      // isMain validation
-      if (image.isMain === true) {
-        mainImageCount++;
+      // Business logic validations
+      if (mainImageCount > 1) {
+        throw new Error("Only one image can be marked as main image");
       }
 
-      // Duplicate URL check
-      if (urls.includes(image.url)) {
-        throw new Error(`Image ${imageIndex}: Duplicate image URL found`);
+      // If no main image is specified, the first image should be main
+      if (mainImageCount === 0 && images.length > 0) {
+        // This is just a warning - we can auto-set the first image as main
+        // throw new Error("At least one image must be marked as main image");
       }
-      urls.push(image.url);
 
-      // Duplicate publicId check
-      if (publicIds.includes(image.publicId)) {
-        throw new Error(`Image ${imageIndex}: Duplicate public ID found`);
-      }
-      publicIds.push(image.publicId);
-
-      // Alt text format validation (if provided)
-      if (image.altText && image.altText.trim() !== image.altText) {
+      // Check for duplicate orders (if orders are specified)
+      const nonZeroOrders = orders.filter((order) => order > 0);
+      const uniqueOrders = [...new Set(nonZeroOrders)];
+      if (nonZeroOrders.length !== uniqueOrders.length) {
         throw new Error(
-          `Image ${imageIndex}: Alt text cannot have leading or trailing spaces`
+          "Duplicate image orders are not allowed (except for order 0)"
         );
       }
 
-      // Public ID format validation (basic)
-      if (!/^[a-zA-Z0-9_\-\/]+$/.test(image.publicId)) {
-        throw new Error(
-          `Image ${imageIndex}: Public ID can only contain letters, numbers, underscores, hyphens, and forward slashes`
-        );
+      return true;
+    }),
+
+  body("listingType")
+    .optional()
+    .custom((listingType, { req }) => {
+      // Listing type is now optional
+      if (!listingType || listingType === "") {
+        return true;
       }
-    }
 
-    // Business logic validations
-    if (mainImageCount > 1) {
-      throw new Error("Only one image can be marked as main image");
-    }
+      const status = req.body.status;
 
-    // If no main image is specified, the first image should be main
-    if (mainImageCount === 0 && images.length > 0) {
-      // This is just a warning - we can auto-set the first image as main
-      // throw new Error("At least one image must be marked as main image");
-    }
+      // Cross-validation with status
+      if (status === "sold" && listingType !== "sale") {
+        throw new Error("Only 'sale' properties can have 'sold' status");
+      }
+      if (status === "rented" && listingType !== "rent") {
+        throw new Error("Only 'rent' properties can have 'rented' status");
+      }
 
-    // Check for duplicate orders (if orders are specified)
-    const nonZeroOrders = orders.filter((order) => order > 0);
-    const uniqueOrders = [...new Set(nonZeroOrders)];
-    if (nonZeroOrders.length !== uniqueOrders.length) {
-      throw new Error(
-        "Duplicate image orders are not allowed (except for order 0)"
-      );
-    }
-
-    return true;
-  }),
-
-  body("listingType").custom((listingType, { req }) => {
-    // Check if listing type is provided
-    if (!listingType) {
-      throw new Error("Listing type is required");
-    }
-
-    const status = req.body.status;
-
-    // Cross-validation with status
-    if (status === "sold" && listingType !== "sale") {
-      throw new Error("Only 'sale' properties can have 'sold' status");
-    }
-    if (status === "rented" && listingType !== "rent") {
-      throw new Error("Only 'rent' properties can have 'rented' status");
-    }
-
-    return true;
-  }),
+      return true;
+    }),
 
   body("details.parking.type").custom((parkingType, { req }) => {
     const parkingAvailable = req.body.details?.parking?.available;
@@ -944,14 +1016,21 @@ const validateCreateProperty = [
 const validateUpdateProperty = [
   // Basic property information
   body("title")
+    .optional()
     .custom((title, { req }) => {
-      // Check if title is required (empty string check)
-      if (title === "") {
-        throw new Error("Property title is required");
+      // If title is not provided, skip validation
+      if (!title || title === null || title === undefined) {
+        return true;
       }
+
+      // If title is empty string, that's also valid (optional field)
+      if (title === "") {
+        return true;
+      }
+
       title = title.trim();
 
-      // Length validation
+      // Length validation (only if title is provided)
       if (title.length < 5) {
         throw new Error("Title must be at least 5 characters long");
       } else if (title.length > 200) {
@@ -989,94 +1068,129 @@ const validateUpdateProperty = [
       return true;
     }),
 
-  body("description").custom((description, { req }) => {
-    // Check if description is required (empty string check)
-    if (description === "") {
-      throw new Error("Property description is required");
-    }
+  body("description")
+    .optional()
+    .custom((description, { req }) => {
+      // If description is not provided, skip validation
+      if (!description || description === null || description === undefined) {
+        return true;
+      }
 
-    // Trim the description
-    description = description.trim();
+      // If description is empty string, that's also valid (optional field)
+      if (description === "") {
+        return true;
+      }
 
-    // Length validation
-    if (description.length < 200) {
-      throw new Error("Description must be at least 200 characters long");
-    } else if (description.length > 10000) {
-      throw new Error("Description cannot exceed 10000 characters");
-    }
+      // Trim the description
+      description = description.trim();
 
-    // Update the request body with the trimmed description
-    req.body.description = description;
+      // Length validation (only if description is provided)
+      if (description.length < 200) {
+        throw new Error("Description must be at least 200 characters long");
+      } else if (description.length > 10000) {
+        throw new Error("Description cannot exceed 10000 characters");
+      }
 
-    return true;
-  }),
+      // Update the request body with the trimmed description
+      req.body.description = description;
+
+      return true;
+    }),
 
   // Property type validation
-  body("propertyType").custom((propertyType, { req }) => {
-    // Check if propertyType is null or undefined
-    if (propertyType == "") {
-      throw new Error("Property type is required");
-    } // Must be string
-    else if (typeof propertyType !== "string") {
-      throw new Error("Property type must be a string");
-    } // Format validation
-    else if (
-      !/^[a-zA-Z0-9\s-]+$/.test(propertyType) ||
-      propertyType.trim() !== propertyType ||
-      propertyType.includes("  ")
-    ) {
-      throw new Error(
-        `Invalid property type format: "${propertyType}". Must contain only letters, numbers, spaces, and hyphens, with no leading/trailing spaces.`
-      );
-    }
+  body("propertyType")
+    .optional()
+    .custom((propertyType, { req }) => {
+      // If propertyType is not provided, skip validation
+      if (
+        !propertyType ||
+        propertyType === null ||
+        propertyType === undefined
+      ) {
+        return true;
+      }
 
-    return true;
-  }),
+      // If propertyType is empty string, that's also valid (optional field)
+      if (propertyType === "") {
+        return true;
+      }
 
-  // Optional price validation - only validates when data is present
-  body("price").optional().custom((price, { req }) => {
-    const listingType = req.body.listingType;
-    
-    // Skip validation for "off plan" listing type
-    if (listingType === "off plan") {
+      // Must be string
+      if (typeof propertyType !== "string") {
+        throw new Error("Property type must be a string");
+      } // Format validation
+      else if (
+        !/^[a-zA-Z0-9\s-]+$/.test(propertyType) ||
+        propertyType.trim() !== propertyType ||
+        propertyType.includes("  ")
+      ) {
+        throw new Error(
+          `Invalid property type format: "${propertyType}". Must contain only letters, numbers, spaces, and hyphens, with no leading/trailing spaces.`
+        );
+      }
+
       return true;
-    }
-    
-    // If price is provided, validate it
-    if (price !== undefined && price !== null && price !== "") {
+    }),
+
+  body("price")
+    .optional()
+    .custom((price, { req }) => {
+      // Skip price validation for "off plan" listing type
+      if (req.body.listingType === "off plan") {
+        return true;
+      }
+
+      // If price is not provided, skip validation (now optional)
+      if (
+        price === null ||
+        price === undefined ||
+        price === "" ||
+        price === "NaN"
+      ) {
+        return true;
+      }
+
+      // Convert to number and validate it's a positive float
       const numPrice = parseFloat(price);
-      if (isNaN(numPrice) || numPrice <= 0) {
+      if (isNaN(numPrice) || numPrice < 0) {
         throw new Error("Price must be a positive number");
       }
+
       // Update the request body with the parsed number
       req.body.price = numPrice;
-    }
-    
-    return true;
-  }),
+
+      return true;
+    }),
 
   // Location validation
 
-  body("location.address").custom((address, { req }) => {
-    // Check if address is required (empty string check)
-    if (!address || address.trim() === "") {
-      throw new Error("Address is required");
-    }
+  body("location.address")
+    .optional()
+    .custom((address, { req }) => {
+      // If address is not provided, skip validation
+      if (!address || address === null || address === undefined) {
+        return true;
+      }
 
-    // Trim the address
-    address = address.trim();
+      // If address is empty string, that's also valid (optional field)
+      if (address === "") {
+        return true;
+      }
 
-    // Length validation
-    if (address.length < 5) {
-      throw new Error("Address must be at least 5 characters long");
-    } else if (address.length > 200) {
-      throw new Error("Address cannot exceed 200 characters");
-    }
+      // Trim the address
+      address = address.trim();
 
-    // Update the request body with the trimmed address
-    req.body.location.address = address;
-    return true;
-  }),
+      // Length validation
+      if (address.length < 5) {
+        throw new Error("Address must be at least 5 characters long");
+      } else if (address.length > 200) {
+        throw new Error("Address cannot exceed 200 characters");
+      }
+
+      // Update the request body with the trimmed address
+      req.body.location.address = address;
+      return true;
+    }),
 
   body("location.emirate")
     .optional()
@@ -1092,9 +1206,6 @@ const validateUpdateProperty = [
       }
 
       let area = req.body.location?.area;
-      console.log("=== EMIRATE VALIDATION DEBUG ===");
-      console.log("Received area:", area, "(type:", typeof area, ")");
-      console.log("Received emirate:", emirate);
 
       // If area is not being updated, get it from the existing property
       if (!area && req.params.id) {
@@ -1155,97 +1266,108 @@ const validateUpdateProperty = [
       return true;
     }),
 
-  body("location.area").custom(async (area, { req }) => {
-    // Check if area is required (empty string check)
-    if (area === "") {
-      throw new Error("Location area is required");
-    }
-
-    // Skip validation if area is not being updated (null/undefined)
-    if (!area) {
-      return true;
-    }
-
-    let emirate = req.body.location?.emirate;
-
-    // If emirate is not being updated, get it from the existing property
-    if (!emirate && req.params.id) {
-      try {
-        const Property = require("../models/Property");
-        let existingProperty;
-
-        // Handle both ObjectId and slug formats
-        if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
-          existingProperty = await Property.findById(req.params.id);
-        } else {
-          existingProperty = await Property.findOne({ slug: req.params.id });
-        }
-
-        if (existingProperty && existingProperty.location?.emirate) {
-          emirate = existingProperty.location.emirate;
-        }
-      } catch (error) {
-        console.error(
-          "Error fetching existing property for area validation:",
-          error
-        );
-        // Continue without validation if we can't fetch the property
+  body("location.area")
+    .optional()
+    .custom(async (area, { req }) => {
+      // Location area is now optional
+      if (area === "" || area === null || area === undefined) {
         return true;
       }
-    }
 
-    if (!emirate) {
-      throw new Error("Emirate must be selected before area");
-    }
+      // Skip validation if area is not being updated (null/undefined)
+      if (!area) {
+        return true;
+      }
 
-    const validAreasForEmirate = EMIRATE_AREA_MAP[emirate];
-    if (!validAreasForEmirate) {
-      throw new Error(`Invalid emirate: ${emirate}`);
-    }
+      let emirate = req.body.location?.emirate;
 
-    // Check if the provided area exists in the valid areas for this emirate (case-insensitive)
-    const isValidArea = validAreasForEmirate.some(
-      (validArea) => validArea.toLowerCase() === area.toLowerCase()
-    );
+      // If emirate is not being updated, get it from the existing property
+      if (!emirate && req.params.id) {
+        try {
+          const Property = require("../models/Property");
+          let existingProperty;
 
-    if (!isValidArea) {
-      throw new Error(`Area "${area}" is not valid for emirate "${emirate}".`);
-    }
+          // Handle both ObjectId and slug formats
+          if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+            existingProperty = await Property.findById(req.params.id);
+          } else {
+            existingProperty = await Property.findOne({ slug: req.params.id });
+          }
 
-    return true;
-  }),
+          if (existingProperty && existingProperty.location?.emirate) {
+            emirate = existingProperty.location.emirate;
+          }
+        } catch (error) {
+          console.error(
+            "Error fetching existing property for area validation:",
+            error
+          );
+          // Continue without validation if we can't fetch the property
+          return true;
+        }
+      }
+
+      if (!emirate) {
+        throw new Error("Emirate must be selected before area");
+      }
+
+      const validAreasForEmirate = EMIRATE_AREA_MAP[emirate];
+      if (!validAreasForEmirate) {
+        throw new Error(`Invalid emirate: ${emirate}`);
+      }
+
+      // Check if the provided area exists in the valid areas for this emirate (case-insensitive)
+      const isValidArea = validAreasForEmirate.some(
+        (validArea) => validArea.toLowerCase() === area.toLowerCase()
+      );
+
+      if (!isValidArea) {
+        throw new Error(
+          `Area "${area}" is not valid for emirate "${emirate}".`
+        );
+      }
+
+      return true;
+    }),
 
   // Property details validation
 
-  // Optional bedrooms validation - only validates when data is present
-  body("details.bedrooms").optional().custom((bedrooms, { req }) => {
-    const propertyType = req.body.propertyType;
+  body("details.bedrooms")
+    .optional()
+    .custom((bedrooms, { req }) => {
+      const propertyType = req.body.propertyType;
 
-    // For studio and office property types, bedrooms should not be provided
-    if (propertyType === "studio" || propertyType === "office") {
-      // If bedrooms field exists and has a value, reject it
-      if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
-        throw new Error(
-          `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
-        );
+      // For studio and office property types, bedrooms should not be provided
+      if (propertyType === "studio" || propertyType === "office") {
+        // If bedrooms field exists (not null and not undefined), reject it
+        if (bedrooms !== "" && bedrooms !== null && bedrooms !== undefined) {
+          throw new Error(
+            `Bedrooms field is not applicable for ${propertyType} property type. Please remove this field.`
+          );
+        }
+        // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
+        return true;
       }
-      return true;
-    }
-    
-    // If bedrooms is provided, validate it
-    if (bedrooms !== undefined && bedrooms !== null && bedrooms !== "") {
-      if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
+
+      // For all other property types, bedrooms are now optional
+      if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
+        return true;
+      } else if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
         throw new Error("Bedrooms must be a non-negative integer");
       }
-    }
 
-    return true;
-  }),
+      return true;
+    }),
 
-  // Optional bathrooms validation - only validates when data is present
-  body("details.bathrooms").optional().custom((bathrooms, { req }) => {
-    // If bathrooms is provided, validate it
-    if (bathrooms !== undefined && bathrooms !== null && bathrooms !== "") {
+  body("details.bathrooms")
+    .optional()
+    .custom((bathrooms, { req }) => {
+      // Bathrooms are now optional
+      if (bathrooms === null || bathrooms === undefined || bathrooms === "") {
+        return true;
+      }
+
+      // Convert to number and validate it's a non-negative integer
       const numBathrooms = parseInt(bathrooms);
       if (
         isNaN(numBathrooms) ||
@@ -1254,30 +1376,32 @@ const validateUpdateProperty = [
       ) {
         throw new Error("Bathrooms must be a non-negative integer");
       }
+
       // Update the request body with the parsed number
       req.body.details.bathrooms = numBathrooms;
-    }
 
-    return true;
-  }),
+      return true;
+    }),
 
-  // Optional area validation - only validates when data is present
-  body("details.area").optional().custom((area, { req }) => {
-    // If area is provided, validate it
-    if (area !== undefined && area !== null && area !== "") {
+  body("details.area")
+    .optional()
+    .custom((area, { req }) => {
+      // Property area is now optional
+      if (area === null || area === undefined || area === "") {
+        return true;
+      }
+
+      // Convert to number and validate it's a positive float
       const numArea = parseFloat(area);
       if (isNaN(numArea) || numArea <= 0) {
         throw new Error("Property area must be a positive number");
       }
-      if (numArea > 50000) {
-        throw new Error("Property area cannot exceed 50,000 square feet");
-      }
+
       // Update the request body with the parsed number
       req.body.details.area = numArea;
-    }
 
-    return true;
-  }),
+      return true;
+    }),
 
   body("details.totalFloors").custom((totalFloors, { req }) => {
     // If totalFloors is not provided (null, undefined, empty string), it's optional
@@ -1355,27 +1479,29 @@ const validateUpdateProperty = [
     return true;
   }),
 
-  body("details.yearBuilt").custom((yearBuilt) => {
-    // If yearBuilt is not provided (null, undefined, empty string), it's optional
-    if (yearBuilt === null || yearBuilt === "" || yearBuilt === undefined) {
+  body("details.yearBuilt")
+    .optional()
+    .custom((yearBuilt) => {
+      // If yearBuilt is not provided (null, undefined, empty string), it's optional
+      if (yearBuilt === null || yearBuilt === "" || yearBuilt === undefined) {
+        return true;
+      }
+
+      // If provided, validate the range
+      const currentYear = new Date().getFullYear();
+      const minYear = 1990;
+      const maxYear = currentYear + 2;
+
+      if (
+        !Number.isInteger(Number(yearBuilt)) ||
+        Number(yearBuilt) < minYear ||
+        Number(yearBuilt) > maxYear
+      ) {
+        throw new Error(`Year built must be between ${minYear} and ${maxYear}`);
+      }
+
       return true;
-    }
-
-    // If provided, validate the range
-    const currentYear = new Date().getFullYear();
-    const minYear = 1990;
-    const maxYear = currentYear + 2;
-
-    if (
-      !Number.isInteger(Number(yearBuilt)) ||
-      Number(yearBuilt) < minYear ||
-      Number(yearBuilt) > maxYear
-    ) {
-      throw new Error(`Year built must be between ${minYear} and ${maxYear}`);
-    }
-
-    return true;
-  }),
+    }),
 
   // Amenities validation
   body("amenities")
@@ -1421,199 +1547,206 @@ const validateUpdateProperty = [
       return true;
     }),
 
-  // Images validation - comprehensive validation for all image fields
-  body("images").custom((images, { req }) => {
-    // For updates, check both the images field and the existingImages/uploadedImages combination
-    let totalImages = 0;
+  // Images validation - comprehensive validation for all image fields (now optional)
+  body("images")
+    .optional()
+    .custom((images, { req }) => {
+      // For updates, check both the images field and the existingImages/uploadedImages combination
+      let totalImages = 0;
 
-    console.log("🔍 IMAGE VALIDATION DEBUG:");
-    console.log("- req.body.existingImages:", req.body.existingImages);
-    console.log(
-      "- req.uploadedImages:",
-      req.uploadedImages ? req.uploadedImages.length : "undefined"
-    );
-    console.log("- req.files:", req.files ? req.files.length : "undefined");
-    console.log("- images parameter:", images ? images.length : images);
+      console.log("🔍 IMAGE VALIDATION DEBUG:");
+      console.log("- req.body.existingImages:", req.body.existingImages);
+      console.log(
+        "- req.uploadedImages:",
+        req.uploadedImages ? req.uploadedImages.length : "undefined"
+      );
+      console.log("- req.files:", req.files ? req.files.length : "undefined");
+      console.log("- images parameter:", images ? images.length : images);
 
-    // Count existing images that are being kept
-    if (req.body.existingImages) {
-      try {
-        const parsedExistingImages = JSON.parse(req.body.existingImages);
-        if (Array.isArray(parsedExistingImages)) {
-          totalImages += parsedExistingImages.length;
-          console.log("- Existing images count:", parsedExistingImages.length);
+      // Count existing images that are being kept
+      if (req.body.existingImages) {
+        try {
+          const parsedExistingImages = JSON.parse(req.body.existingImages);
+          if (Array.isArray(parsedExistingImages)) {
+            totalImages += parsedExistingImages.length;
+            console.log(
+              "- Existing images count:",
+              parsedExistingImages.length
+            );
+          }
+        } catch (error) {
+          throw new Error("Invalid existing images format");
         }
-      } catch (error) {
-        throw new Error("Invalid existing images format");
       }
-    }
 
-    // Count new images being uploaded
-    if (req.uploadedImages && Array.isArray(req.uploadedImages)) {
-      totalImages += req.uploadedImages.length;
-      console.log("- Uploaded images count:", req.uploadedImages.length);
-    } else if (req.files && Array.isArray(req.files)) {
-      // Count raw uploaded files (before processing) - validation runs before processValidatedImages
-      totalImages += req.files.length;
-      console.log("- Raw files count:", req.files.length);
-    }
+      // Count new images being uploaded
+      if (req.uploadedImages && Array.isArray(req.uploadedImages)) {
+        totalImages += req.uploadedImages.length;
+        console.log("- Uploaded images count:", req.uploadedImages.length);
+      } else if (req.files && Array.isArray(req.files)) {
+        // Count raw uploaded files (before processing) - validation runs before processValidatedImages
+        totalImages += req.files.length;
+        console.log("- Raw files count:", req.files.length);
+      }
 
-    console.log("- Total images:", totalImages);
+      console.log("- Total images:", totalImages);
 
-    // If we have a direct images array (legacy format), use that instead
-    if (images !== undefined) {
-      // Images are now optional - allow empty arrays
+      // If we have a direct images array (legacy format), use that instead
+      if (images !== undefined) {
+        // Images are now optional - allow empty arrays
+        if (images.length === 0) {
+          return true; // Allow properties without images
+        }
+        totalImages = images.length;
+      } else {
+        // For the new format (existingImages + uploadedImages), check total
+        // Images are now optional - allow properties without images
+        if (totalImages === 0) {
+          return true; // Allow properties without images
+        }
+      }
+
+      // Use the images array if available, otherwise skip detailed validation
+      // (detailed validation will happen in the controller after processing)
+      if (images === undefined) {
+        // Just check the total count for new format
+        if (totalImages > 10) {
+          throw new Error("Cannot have more than 10 images per property");
+        }
+        return true;
+      }
+
+      // If images field is provided but empty, it's now allowed (optional field)
       if (images.length === 0) {
         return true; // Allow properties without images
       }
-      totalImages = images.length;
-    } else {
-      // For the new format (existingImages + uploadedImages), images are optional
-      // Allow properties without images
-      if (totalImages === 0) {
-        return true; // Allow properties without images
-      }
-    }
 
-    // Use the images array if available, otherwise skip detailed validation
-    // (detailed validation will happen in the controller after processing)
-    if (images === undefined) {
-      // Just check the total count for new format
-      if (totalImages > 10) {
-        throw new Error("Cannot have more than 10 images per property");
-      }
-      return true;
-    }
-
-    // If images field is provided but empty, allow it (images are now optional)
-    if (images.length === 0) {
-      return true; // Allow properties without images
-    }
-
-    // Check array length
-    if (images.length > 10) {
-      throw new Error("Must have between 1 and 10 images");
-    }
-
-    let mainImageCount = 0;
-    const orders = [];
-    const urls = [];
-    const publicIds = [];
-
-    for (let i = 0; i < images.length; i++) {
-      const image = images[i];
-      const imageIndex = i + 1;
-
-      // Required fields validation
-      if (!image.url) {
-        throw new Error(`Image ${imageIndex}: URL is required`);
+      // Check array length
+      if (images.length > 10) {
+        throw new Error("Must have between 1 and 10 images");
       }
 
-      if (!image.publicId) {
-        throw new Error(`Image ${imageIndex}: Public ID is required`);
-      }
+      let mainImageCount = 0;
+      const orders = [];
+      const urls = [];
+      const publicIds = [];
 
-      // URL format validation - handle both regular URLs and local URLs
-      const urlRegex = /^https?:\/\/.+(\.(jpg|jpeg|png|webp)|\/[^\/]+)$/i;
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        const imageIndex = i + 1;
 
-      if (!urlRegex.test(image.url) && !validateImageUrl(image.url)) {
-        throw new Error(
-          `Image ${imageIndex}: URL must be a valid HTTP/HTTPS URL ending with jpg, jpeg, png, webp, or a valid local upload URL`
-        );
-      }
+        // Required fields validation
+        if (!image.url) {
+          throw new Error(`Image ${imageIndex}: URL is required`);
+        }
 
-      if (image.publicId.length > 100) {
-        throw new Error(
-          `Image ${imageIndex}: Public ID cannot exceed 100 characters`
-        );
-      }
+        if (!image.publicId) {
+          throw new Error(`Image ${imageIndex}: Public ID is required`);
+        }
 
-      // Order validation
-      if (image.order !== undefined) {
-        if (
-          !Number.isInteger(image.order) ||
-          image.order < 0 ||
-          image.order > 10
-        ) {
+        // URL format validation - handle both regular URLs and local URLs
+        const urlRegex = /^https?:\/\/.+(\.(jpg|jpeg|png|webp)|\/[^\/]+)$/i;
+
+        if (!urlRegex.test(image.url) && !validateImageUrl(image.url)) {
           throw new Error(
-            `Image ${imageIndex}: Order must be an integer between 0 and 10`
+            `Image ${imageIndex}: URL must be a valid HTTP/HTTPS URL ending with jpg, jpeg, png, webp, or a valid local upload URL`
           );
         }
-        orders.push(image.order);
+
+        if (image.publicId.length > 100) {
+          throw new Error(
+            `Image ${imageIndex}: Public ID cannot exceed 100 characters`
+          );
+        }
+
+        // Order validation
+        if (image.order !== undefined) {
+          if (
+            !Number.isInteger(image.order) ||
+            image.order < 0 ||
+            image.order > 10
+          ) {
+            throw new Error(
+              `Image ${imageIndex}: Order must be an integer between 0 and 10`
+            );
+          }
+          orders.push(image.order);
+        }
+
+        // isMain validation
+        if (image.isMain === true) {
+          mainImageCount++;
+        }
+
+        // Duplicate URL check
+        if (urls.includes(image.url)) {
+          throw new Error(`Image ${imageIndex}: Duplicate image URL found`);
+        }
+        urls.push(image.url);
+
+        // Duplicate publicId check
+        if (publicIds.includes(image.publicId)) {
+          throw new Error(`Image ${imageIndex}: Duplicate public ID found`);
+        }
+        publicIds.push(image.publicId);
+
+        // Alt text format validation (if provided)
+        if (image.altText && image.altText.trim() !== image.altText) {
+          throw new Error(
+            `Image ${imageIndex}: Alt text cannot have leading or trailing spaces`
+          );
+        }
+
+        // Public ID format validation (basic)
+        if (!/^[a-zA-Z0-9_\-\/]+$/.test(image.publicId)) {
+          throw new Error(
+            `Image ${imageIndex}: Public ID can only contain letters, numbers, underscores, hyphens, and forward slashes`
+          );
+        }
       }
 
-      // isMain validation
-      if (image.isMain === true) {
-        mainImageCount++;
+      // Business logic validations
+      if (mainImageCount > 1) {
+        throw new Error("Only one image can be marked as main image");
       }
 
-      // Duplicate URL check
-      if (urls.includes(image.url)) {
-        throw new Error(`Image ${imageIndex}: Duplicate image URL found`);
+      // If no main image is specified, the first image should be main
+      if (mainImageCount === 0 && images.length > 0) {
+        // This is just a warning - we can auto-set the first image as main
+        // throw new Error("At least one image must be marked as main image");
       }
-      urls.push(image.url);
 
-      // Duplicate publicId check
-      if (publicIds.includes(image.publicId)) {
-        throw new Error(`Image ${imageIndex}: Duplicate public ID found`);
-      }
-      publicIds.push(image.publicId);
-
-      // Alt text format validation (if provided)
-      if (image.altText && image.altText.trim() !== image.altText) {
+      // Check for duplicate orders (if orders are specified)
+      const nonZeroOrders = orders.filter((order) => order > 0);
+      const uniqueOrders = [...new Set(nonZeroOrders)];
+      if (nonZeroOrders.length !== uniqueOrders.length) {
         throw new Error(
-          `Image ${imageIndex}: Alt text cannot have leading or trailing spaces`
+          "Duplicate image orders are not allowed (except for order 0)"
         );
       }
 
-      // Public ID format validation (basic)
-      if (!/^[a-zA-Z0-9_\-\/]+$/.test(image.publicId)) {
-        throw new Error(
-          `Image ${imageIndex}: Public ID can only contain letters, numbers, underscores, hyphens, and forward slashes`
-        );
+      return true;
+    }),
+
+  body("listingType")
+    .optional()
+    .custom((listingType, { req }) => {
+      // Listing type is now optional
+      if (!listingType || listingType === "") {
+        return true;
       }
-    }
 
-    // Business logic validations
-    if (mainImageCount > 1) {
-      throw new Error("Only one image can be marked as main image");
-    }
+      const status = req.body.status;
 
-    // If no main image is specified, the first image should be main
-    if (mainImageCount === 0 && images.length > 0) {
-      // This is just a warning - we can auto-set the first image as main
-      // throw new Error("At least one image must be marked as main image");
-    }
+      // Cross-validation with status
+      if (status === "sold" && listingType !== "sale") {
+        throw new Error("Only 'sale' properties can have 'sold' status");
+      } else if (status === "rented" && listingType !== "rent") {
+        throw new Error("Only 'rent' properties can have 'rented' status");
+      }
 
-    // Check for duplicate orders (if orders are specified)
-    const nonZeroOrders = orders.filter((order) => order > 0);
-    const uniqueOrders = [...new Set(nonZeroOrders)];
-    if (nonZeroOrders.length !== uniqueOrders.length) {
-      throw new Error(
-        "Duplicate image orders are not allowed (except for order 0)"
-      );
-    }
-
-    return true;
-  }),
-
-  body("listingType").custom((listingType, { req }) => {
-    // Check if listing type is provided
-    if (!listingType) {
-      throw new Error("Listing type is required");
-    }
-
-    const status = req.body.status;
-
-    // Cross-validation with status
-    if (status === "sold" && listingType !== "sale") {
-      throw new Error("Only 'sale' properties can have 'sold' status");
-    } else if (status === "rented" && listingType !== "rent") {
-      throw new Error("Only 'rent' properties can have 'rented' status");
-    }
-
-    return true;
-  }),
+      return true;
+    }),
 
   body("details.parking.type").custom((parkingType, { req }) => {
     const parkingAvailable = req.body.details?.parking?.available;
@@ -2100,219 +2233,6 @@ const createPropertyWithImagesValidation = [
 ];
 
 /**
- * Validation for creating properties without images - allows empty image arrays
- */
-const validateCreatePropertyWithoutImages = [
-  // Copy all validations from validateCreateProperty except images
-  body("title")
-    .custom((title, { req }) => {
-      if (!title || title.trim() === "") {
-        throw new Error("Title is required");
-      }
-      if (title.length < 10) {
-        throw new Error("Title must be at least 10 characters long");
-      }
-      if (title.length > 100) {
-        throw new Error("Title must not exceed 100 characters");
-      }
-      return true;
-    })
-    .custom(async (title, { req }) => {
-      const Property = require("../models/Property");
-      const existingProperty = await Property.findOne({
-        title: { $regex: new RegExp(`^${title}$`, "i") },
-      });
-      if (existingProperty) {
-        throw new Error("A property with this title already exists");
-      }
-      return true;
-    }),
-
-  body("description").custom((description, { req }) => {
-    if (!description || description.trim() === "") {
-      throw new Error("Description is required");
-    }
-    if (description.length < 50) {
-      throw new Error("Description must be at least 50 characters long");
-    }
-    return true;
-  }),
-
-  // Property type validation
-  body("propertyType").custom((propertyType, { req }) => {
-    if (!propertyType) {
-      throw new Error("Property type is required");
-    }
-    if (!PROPERTY_TYPES.includes(propertyType)) {
-      throw new Error(
-        `Invalid property type. Must be one of: ${PROPERTY_TYPES.join(", ")}`
-      );
-    }
-    return true;
-  }),
-
-  // Price validation removed - no longer required
-
-  // Location validations
-  body("location.address").custom((address, { req }) => {
-    if (!address || address.trim() === "") {
-      throw new Error("Address is required");
-    }
-    if (address.length < 10) {
-      throw new Error("Address must be at least 10 characters long");
-    }
-    if (address.length > 200) {
-      throw new Error("Address must not exceed 200 characters");
-    }
-    return true;
-  }),
-
-  body("location.emirate").notEmpty().withMessage("Emirate is required"),
-
-  body("location.area").custom((value, { req }) => {
-    if (!value || value.trim() === "") {
-      throw new Error("Area is required");
-    }
-    return true;
-  }),
-
-  // Details validations (manually copied from validateCreateProperty)
-  // Bedrooms validation removed - no longer required
-
-  // Bathrooms validation removed - no longer required
-
-  // Area validation removed - no longer required
-
-  body("details.totalFloors").custom((totalFloors, { req }) => {
-    if (totalFloors !== undefined && totalFloors !== null) {
-      if (!Number.isInteger(totalFloors) || totalFloors < 1 || totalFloors > 200) {
-        throw new Error("Total floors must be an integer between 1 and 200");
-      }
-    }
-    return true;
-  }),
-
-  body("details.floorLevel").custom((floorLevel, { req }) => {
-    if (floorLevel !== undefined && floorLevel !== null) {
-      if (!Number.isInteger(floorLevel) || floorLevel < -10 || floorLevel > 200) {
-        throw new Error("Floor level must be an integer between -10 and 200");
-      }
-    }
-    return true;
-  }),
-
-  body("details.landArea").custom((landArea, { req }) => {
-    if (landArea !== undefined && landArea !== null) {
-      if (typeof landArea !== "number" || landArea <= 0 || landArea > 1000000) {
-        throw new Error("Land area must be a positive number not exceeding 1,000,000");
-      }
-    }
-    return true;
-  }),
-
-  body("details.yearBuilt").custom((yearBuilt) => {
-    if (yearBuilt !== undefined && yearBuilt !== null) {
-      const currentYear = new Date().getFullYear();
-      if (!Number.isInteger(yearBuilt) || yearBuilt < 1800 || yearBuilt > currentYear + 5) {
-        throw new Error(`Year built must be between 1800 and ${currentYear + 5}`);
-      }
-    }
-    return true;
-  }),
-
-  body("amenities")
-    .optional({ nullable: true, checkFalsy: true })
-    .if(body("amenities").exists())
-    .isArray()
-    .withMessage("Amenities must be an array")
-    .custom(async (amenities, { req }) => {
-      if (amenities && amenities.length > 0) {
-        const propertyType = req.body.propertyType;
-        if (!propertyType) {
-          throw new Error("Property type is required to validate amenities");
-        }
-        const allowedAmenities = PROPERTY_TYPE_AMENITIES_MAP[propertyType];
-        if (!allowedAmenities) {
-          throw new Error("Invalid property type for amenities validation");
-        }
-        for (const amenity of amenities) {
-          if (!allowedAmenities.includes(amenity)) {
-            throw new Error(`Invalid amenity '${amenity}' for property type '${propertyType}'`);
-          }
-        }
-      }
-      return true;
-    }),
-
-  body("listingType").custom((listingType, { req }) => {
-    if (!listingType) {
-      throw new Error("Listing type is required");
-    }
-    if (!LISTING_TYPES.includes(listingType)) {
-      throw new Error("Invalid listing type");
-    }
-    return true;
-  }),
-
-  body("details.parking.type").custom((parkingType, { req }) => {
-    if (parkingType !== undefined && parkingType !== null) {
-      const validTypes = ["covered", "open", "none"];
-      if (!validTypes.includes(parkingType)) {
-        throw new Error("Parking type must be 'covered', 'open', or 'none'");
-      }
-    }
-    return true;
-  }),
-
-  body("details.parking.spaces").custom((spaces, { req }) => {
-    if (spaces !== undefined && spaces !== null) {
-      if (!Number.isInteger(spaces) || spaces < 0 || spaces > 20) {
-        throw new Error("Parking spaces must be an integer between 0 and 20");
-      }
-    }
-    return true;
-  }),
-
-  body("status").custom((status, { req }) => {
-    if (status !== undefined && status !== null) {
-      if (!PROPERTY_STATUS.includes(status)) {
-        throw new Error("Invalid status");
-      }
-    }
-    return true;
-  }),
-
-  // Modified images validation - allows empty arrays
-  body("images").custom((images, { req }) => {
-    if (images === undefined || images === null) {
-      return true; // Allow undefined/null for without-images endpoint
-    }
-    if (!Array.isArray(images)) {
-      throw new Error("Images must be an array");
-    }
-    // Allow empty arrays for without-images endpoint
-    if (images.length === 0) {
-      return true;
-    }
-    if (images.length > 10) {
-      throw new Error("Cannot have more than 10 images");
-    }
-    return true;
-  }),
-
-  cleanupParkingFields,
-  handleValidationErrors,
-];
-
-/**
- * Combined validation middleware for creating properties without images
- */
-const createPropertyWithoutImagesValidation = [
-  sanitizeInput,
-  ...validateCreatePropertyWithoutImages,
-];
-
-/**
  * Combined validation middleware for updating properties
  */
 const updatePropertyValidation = [
@@ -2776,6 +2696,26 @@ const validatePropertyId = [
 ];
 
 /**
+ * Validation rules for category ID parameter
+ */
+const validateCategoryId = [
+  param("id").custom((id, { req }) => {
+    // Check if ID is provided
+    if (!id || id.trim() === "") {
+      throw new Error("Category ID is required");
+    }
+
+    // Check if it's a valid MongoDB ObjectId
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      throw new Error("Invalid category ID format");
+    }
+
+    return true;
+  }),
+  handleValidationErrors,
+];
+
+/**
  * Validation rules for property rejection
  */
 const validateRejection = [
@@ -2806,12 +2746,712 @@ const validateRejection = [
   handleValidationErrors,
 ];
 
+/**
+ * Validation rules for blog creation
+ */
+const validateCreateBlog = [
+  body("title").custom((title, { req }) => {
+    if (!title || title.trim() === "") {
+      throw new Error("Title is required");
+    }
+
+    title = title.trim();
+
+    if (title.length < 5) {
+      throw new Error("Title must be at least 5 characters long");
+    } else if (title.length > 200) {
+      throw new Error("Title must not exceed 200 characters");
+    } // Check for meaningful content (not just spaces/special chars)
+    else if (!/[a-zA-Z]/.test(title)) {
+      throw new Error("Title must contain at least some letters");
+    }
+
+    req.body.title = title;
+    return true;
+  }),
+
+  body("content").custom((content, { req }) => {
+    if (!content || content.trim() === "") {
+      throw new Error("Content is required");
+    }
+
+    content = content.trim();
+
+    if (content.length < 200) {
+      throw new Error("Content must be at least 50 characters long");
+    } else if (content.length > 10000) {
+      throw new Error("Content cannot exceed 10000 characters");
+    }
+
+    req.body.content = content;
+    return true;
+  }),
+
+  body("category").custom((category, { req }) => {
+    // Category is optional - skip validation if not provided
+    if (category === null || category === undefined || category === "") {
+      return true;
+    }
+
+    category = category.trim();
+
+    // Check if it's a valid MongoDB ObjectId
+    if (!/^[0-9a-fA-F]{24}$/.test(category)) {
+      throw new Error("Invalid category ID format");
+    }
+
+    req.body.category = category;
+    return true;
+  }),
+
+  body("tags").custom((tags, { req }) => {
+    // Tags are optional - skip validation if not provided
+    if (tags === null || tags === undefined || tags === "") {
+      return true;
+    }
+
+    let tagArray;
+
+    if (typeof tags === "string") {
+      try {
+        tagArray = JSON.parse(tags);
+      } catch (e) {
+        // If not JSON, treat as comma-separated string
+        tagArray = tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag);
+      }
+    } else if (Array.isArray(tags)) {
+      tagArray = tags;
+    } else {
+      throw new Error("Tags must be an array or comma-separated string");
+    }
+
+    if (tagArray.length > 10) {
+      throw new Error("Maximum 10 tags allowed");
+    }
+
+    // Validate each tag
+    for (const tag of tagArray) {
+      if (typeof tag !== "string" || tag.trim().length === 0) {
+        throw new Error("Each tag must be a non-empty string");
+      }
+      if (tag.trim().length > 50) {
+        throw new Error("Each tag must not exceed 50 characters");
+      }
+    }
+
+    req.body.tags = tagArray.map((tag) => tag.trim());
+    return true;
+  }),
+
+  body("status").custom((status, { req }) => {
+    // Status is required for blog creation
+    if (status === null || status === undefined || status === "") {
+      throw new Error("Status is required");
+    }
+
+    const validStatuses = ["draft", "published", "archived"];
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Status must be one of: ${validStatuses.join(", ")}`);
+    }
+
+    return true;
+  }),
+
+  body("featured")
+    .optional()
+    .isBoolean()
+    .withMessage("Featured must be a boolean"),
+
+  // Images validation - blog requires exactly 1 image
+  body("images").custom((images, { req }) => {
+    // Check if images are provided (either as processed images or uploaded files)
+    const hasUploadedFiles = req.files && req.files.length > 0;
+    const hasProcessedImages =
+      images && Array.isArray(images) && images.length > 0;
+
+    // Blog images are required - at least one must be provided
+    if (!hasUploadedFiles && !hasProcessedImages) {
+      throw new Error("Image is required");
+    }
+
+    // If we have uploaded files but no processed images, skip further validation
+    // (images will be processed after validation passes)
+    if (hasUploadedFiles && !hasProcessedImages) {
+      // Check file count - blogs require exactly 1 image
+      if (req.files.length === 0) {
+        throw new Error("Image is required");
+      }
+      if (req.files.length > 1) {
+        throw new Error("Blog posts can only have 1 image");
+      }
+      return true;
+    }
+
+    // Check array length - blogs require exactly 1 image
+    if (images.length === 0) {
+      throw new Error("Image is required");
+    }
+    if (images.length > 1) {
+      throw new Error("Blog posts can only have 1 image");
+    }
+
+    // Validate the single image (no loop needed since it's always 1 image)
+    const image = images[0];
+
+    // Required fields validation
+    if (!image.url) {
+      throw new Error("Image URL is required");
+    }
+
+    if (!image.publicId) {
+      throw new Error("Image Public ID is required");
+    }
+
+    // URL format validation - handle both regular URLs and local URLs
+    const urlRegex = /^https?:\/\/.+(\.(jpg|jpeg|png|webp)|\/[^\/]+)$/i;
+
+    if (!urlRegex.test(image.url) && !validateImageUrl(image.url)) {
+      throw new Error(
+        "Image URL must be a valid HTTP/HTTPS URL ending with jpg, jpeg, png, webp, or a valid local upload URL"
+      );
+    }
+
+    if (image.publicId.length > 100) {
+      throw new Error("Image Public ID cannot exceed 100 characters");
+    }
+
+    // Alt text format validation (if provided)
+    if (image.altText && image.altText.trim() !== image.altText) {
+      throw new Error("Image alt text cannot have leading or trailing spaces");
+    }
+
+    // Public ID format validation (basic)
+    if (!/^[a-zA-Z0-9_\-\/]+$/.test(image.publicId)) {
+      throw new Error(
+        "Image Public ID can only contain letters, numbers, underscores, hyphens, and forward slashes"
+      );
+    }
+
+    return true;
+  }),
+
+  handleValidationErrors,
+];
+
+/**
+ * Validation rules for blog update
+ */
+const validateUpdateBlog = [
+  body("title")
+    .optional()
+    .custom((title, { req }) => {
+      if (title !== undefined) {
+        if (!title || title.trim() === "") {
+          throw new Error("Title cannot be empty");
+        }
+
+        title = title.trim();
+
+        if (title.length < 5) {
+          throw new Error("Title must be at least 5 characters long");
+        } else if (title.length > 200) {
+          throw new Error("Title must not exceed 200 characters");
+        } // Check for meaningful content (not just spaces/special chars)
+        else if (!/[a-zA-Z]/.test(title)) {
+          throw new Error("Title must contain at least some letters");
+        }
+
+        req.body.title = title;
+      }
+      return true;
+    }),
+
+  body("content")
+    .optional()
+    .custom((content, { req }) => {
+      if (content !== undefined) {
+        if (!content || content.trim() === "") {
+          throw new Error("Content cannot be empty");
+        }
+
+        content = content.trim();
+
+        if (content.length < 200) {
+          throw new Error("Content must be at least 50 characters long");
+        } else if (content.length > 10000) {
+          throw new Error("Content cannot exceed 10000 characters");
+        }
+
+        req.body.content = content;
+      }
+      return true;
+    }),
+
+  body("category").custom((category, { req }) => {
+    // Category is optional for updates - skip validation if not provided
+    if (category === null || category === undefined || category === "") {
+      return true;
+    }
+
+    category = category.trim();
+
+    // Check if it's a valid MongoDB ObjectId
+    if (!/^[0-9a-fA-F]{24}$/.test(category)) {
+      throw new Error("Invalid category ID format");
+    }
+
+    req.body.category = category;
+    return true;
+  }),
+
+  body("tags").custom((tags, { req }) => {
+    // Tags are optional for updates - skip validation if not provided
+    if (tags === null || tags === undefined || tags === "") {
+      return true;
+    }
+
+    let tagArray;
+
+    if (typeof tags === "string") {
+      try {
+        tagArray = JSON.parse(tags);
+      } catch (e) {
+        // If not JSON, treat as comma-separated string
+        tagArray = tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag);
+      }
+    } else if (Array.isArray(tags)) {
+      tagArray = tags;
+    } else {
+      throw new Error("Tags must be an array or comma-separated string");
+    }
+
+    if (tagArray.length > 10) {
+      throw new Error("Maximum 10 tags allowed");
+    }
+
+    // Validate each tag
+    for (const tag of tagArray) {
+      if (typeof tag !== "string" || tag.trim().length === 0) {
+        throw new Error("Each tag must be a non-empty string");
+      }
+      if (tag.trim().length > 50) {
+        throw new Error("Each tag must not exceed 50 characters");
+      }
+    }
+
+    req.body.tags = tagArray.map((tag) => tag.trim());
+    return true;
+  }),
+
+  body("status").custom((status, { req }) => {
+    // Status is required for blog updates
+    if (status === null || status === undefined || status === "") {
+      throw new Error("Status is required");
+    }
+
+    const validStatuses = ["draft", "published", "archived"];
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Status must be one of: ${validStatuses.join(", ")}`);
+    }
+
+    return true;
+  }),
+
+  body("featured")
+    .optional()
+    .isBoolean()
+    .withMessage("Featured must be a boolean"),
+
+  // Images validation - blog updates can modify the single image
+  body("images").custom((images, { req }) => {
+    // Check if this is an image-related update
+    const hasImageFields =
+      req.body.existingImages !== undefined ||
+      (req.files && req.files.length > 0) ||
+      (req.uploadedImages && req.uploadedImages.length > 0) ||
+      images !== undefined;
+
+    // If no image-related fields are present, skip image validation
+    // This allows simple field updates (title, content, etc.) without image validation
+    if (!hasImageFields) {
+      console.log("- No image fields detected, skipping image validation");
+      return true;
+    }
+
+    console.log("- Image fields detected, validating images");
+
+    // For updates, check both the images field and the existingImages/uploadedImages combination
+    let totalImages = 0;
+
+    // Count existing images that are being kept
+    if (req.body.existingImages) {
+      try {
+        const parsedExistingImages = JSON.parse(req.body.existingImages);
+        if (Array.isArray(parsedExistingImages)) {
+          totalImages += parsedExistingImages.length;
+          console.log("- Existing images count:", parsedExistingImages.length);
+        }
+      } catch (error) {
+        throw new Error("Invalid existing images format");
+      }
+    }
+
+    // Count new images being uploaded
+    if (req.uploadedImages && Array.isArray(req.uploadedImages)) {
+      totalImages += req.uploadedImages.length;
+      console.log("- Uploaded images count:", req.uploadedImages.length);
+    } else if (req.files && Array.isArray(req.files)) {
+      // Count raw uploaded files (before processing) - validation runs before processValidatedImages
+      totalImages += req.files.length;
+      console.log("- Raw files count:", req.files.length);
+    }
+
+    console.log("- Total images:", totalImages);
+
+    // If we have a direct images array (legacy format), use that instead
+    if (images !== undefined) {
+      totalImages = images.length;
+    }
+
+    // Images are required for blog updates when image fields are present - at least one must be provided
+    if (totalImages === 0) {
+      throw new Error("Image is required");
+    }
+
+    // Blogs can only have 1 image maximum
+    if (totalImages > 1) {
+      throw new Error("Blog posts can only have 1 image");
+    }
+
+    // Use the images array if available, otherwise skip detailed validation
+    // (detailed validation will happen in the controller after processing)
+    if (images === undefined) {
+      return true;
+    }
+
+    // If images array is provided but empty, that's not allowed for blog updates
+    if (images.length === 0) {
+      throw new Error("Image is required");
+    }
+
+    // Validate the single image (no loop needed since it's always 1 image)
+    const image = images[0];
+
+    // Required fields validation
+    if (!image.url) {
+      throw new Error("Image URL is required");
+    }
+
+    if (!image.publicId) {
+      throw new Error("Image Public ID is required");
+    }
+
+    // URL format validation - handle both regular URLs and local URLs
+    const urlRegex = /^https?:\/\/.+(\.(jpg|jpeg|png|webp)|\/[^\/]+)$/i;
+
+    if (!urlRegex.test(image.url) && !validateImageUrl(image.url)) {
+      throw new Error(
+        "Image URL must be a valid HTTP/HTTPS URL ending with jpg, jpeg, png, webp, or a valid local upload URL"
+      );
+    }
+
+    if (image.publicId.length > 100) {
+      throw new Error("Image Public ID cannot exceed 100 characters");
+    }
+
+    // Alt text format validation (if provided)
+    if (image.altText && image.altText.trim() !== image.altText) {
+      throw new Error("Image alt text cannot have leading or trailing spaces");
+    }
+
+    // Public ID format validation (basic)
+    if (!/^[a-zA-Z0-9_\-\/]+$/.test(image.publicId)) {
+      throw new Error(
+        "Image Public ID can only contain letters, numbers, underscores, hyphens, and forward slashes"
+      );
+    }
+
+    return true;
+  }),
+
+  handleValidationErrors,
+];
+
+/**
+ * Validation rules for blog query parameters
+ */
+const validateBlogQuery = [
+  query("page")
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage("Page must be a positive integer"),
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 50 })
+    .withMessage("Limit must be between 1 and 50"),
+  query("category")
+    .optional()
+    .isMongoId()
+    .withMessage("Category must be a valid MongoDB ObjectId"),
+  query("status")
+    .optional()
+    .isIn(["draft", "published", "archived"])
+    .withMessage("Invalid status"),
+  query("featured")
+    .optional()
+    .isBoolean()
+    .withMessage("Featured must be a boolean"),
+  query("search")
+    .optional()
+    .isLength({ min: 1, max: 100 })
+    .withMessage("Search term must be between 1 and 100 characters"),
+  query("tags")
+    .optional()
+    .isLength({ min: 1, max: 200 })
+    .withMessage("Tags parameter must be between 1 and 200 characters"),
+  query("sortBy")
+    .optional()
+    .isIn(["createdAt", "publishedAt", "title"])
+    .withMessage("Invalid sort field"),
+  query("sortOrder")
+    .optional()
+    .isIn(["asc", "desc"])
+    .withMessage("Sort order must be 'asc' or 'desc'"),
+  handleValidationErrors,
+];
+
+/**
+ * Validation rules for blog category query parameters
+ */
+const validateBlogCategoryQuery = [
+  query("page")
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage("Page must be a positive integer"),
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 50 })
+    .withMessage("Limit must be between 1 and 50"),
+  query("isActive")
+    .optional()
+    .isBoolean()
+    .withMessage("isActive must be a boolean"),
+  query("search")
+    .optional()
+    .isLength({ min: 1, max: 100 })
+    .withMessage("Search term must be between 1 and 100 characters"),
+  query("sortBy")
+    .optional()
+    .isIn(["createdAt", "name", "updatedAt"])
+    .withMessage("Invalid sort field"),
+  query("sortOrder")
+    .optional()
+    .isIn(["asc", "desc"])
+    .withMessage("Sort order must be 'asc' or 'desc'"),
+  handleValidationErrors,
+];
+
+/**
+ * Combined validation for blog creation with images
+ */
+const createBlogValidation = [...validateCreateBlog];
+
+/**
+ * Combined validation for blog update
+ */
+const updateBlogValidation = [...validateUpdateBlog];
+
+/**
+ * Combined validation for blog query
+ */
+const blogQueryValidation = [...validateBlogQuery];
+
+/**
+ * Combined validation for single blog
+ */
+const singleBlogValidation = [...validateObjectId];
+
+/**
+ * Combined validation for blog category query
+ */
+const blogCategoryQueryValidation = [...validateBlogCategoryQuery];
+
+/**
+ * Combined validation for single blog category
+ */
+const singleBlogCategoryValidation = [...validateObjectId];
+
+/**
+ * Validation rules for creating blog categories
+ */
+const validateCreateBlogCategory = [
+  body("name").custom(async (name, { req }) => {
+    // Check if name is required (empty string check)
+    if (name === "" || !name) {
+      throw new Error("Category name is required");
+    }
+
+    // Trim the name
+    name = name.trim();
+
+    // Length validation
+    if (name.length < 2) {
+      throw new Error("Category name must be at least 2 characters long");
+    } else if (name.length > 100) {
+      throw new Error("Category name cannot exceed 100 characters");
+    }
+
+    // Check for meaningful content (not just spaces/special chars)
+    if (!/[a-zA-Z]/.test(name)) {
+      throw new Error("Category name must contain at least some letters");
+    }
+
+    // Check for duplicate names
+    const BlogCategory = require("../models/BlogCategory");
+    const existing = await BlogCategory.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") },
+    });
+    if (existing) {
+      throw new Error(
+        "A category with this name already exists. Please use a unique name."
+      );
+    }
+
+    // Update the request body with the trimmed name
+    req.body.name = name;
+    return true;
+  }),
+
+  body("description").custom((description, { req }) => {
+    // Description is optional, but if provided, validate it
+    if (description !== undefined && description !== null) {
+      // Trim the description
+      description = description.trim();
+
+      // Length validation
+      if (description.length > 500) {
+        throw new Error("Description cannot exceed 500 characters");
+      }
+
+      // Update the request body with the trimmed description
+      req.body.description = description;
+    }
+
+    return true;
+  }),
+
+  handleValidationErrors,
+];
+
+/**
+ * Validation rules for updating blog categories
+ */
+const validateUpdateBlogCategory = [
+  body("name").custom(async (name, { req }) => {
+    // Name is optional for updates, but if provided, validate it
+    if (name !== undefined && name !== null) {
+      // Check if name is empty string
+      if (name === "") {
+        throw new Error("Category name cannot be empty");
+      }
+
+      // Trim the name
+      name = name.trim();
+
+      // Length validation
+      if (name.length < 2) {
+        throw new Error("Category name must be at least 2 characters long");
+      } else if (name.length > 100) {
+        throw new Error("Category name cannot exceed 100 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(name)) {
+        throw new Error("Category name must contain at least some letters");
+      }
+
+      // Check for duplicate names (excluding current category)
+      const BlogCategory = require("../models/BlogCategory");
+      const categoryId = req.params.id;
+
+      const existing = await BlogCategory.findOne({
+        name: { $regex: new RegExp(`^${name}$`, "i") },
+        _id: { $ne: categoryId },
+      });
+      if (existing) {
+        throw new Error(
+          "A category with this name already exists. Please use a unique name."
+        );
+      }
+
+      // Update the request body with the trimmed name
+      req.body.name = name;
+    }
+
+    return true;
+  }),
+
+  body("description").custom((description, { req }) => {
+    // Description is optional, but if provided, validate it
+    if (description !== undefined && description !== null) {
+      // Trim the description
+      description = description.trim();
+
+      // Length validation
+      if (description.length > 500) {
+        throw new Error("Description cannot exceed 500 characters");
+      }
+
+      // Update the request body with the trimmed description
+      req.body.description = description;
+    }
+
+    return true;
+  }),
+
+  body("isActive").custom((isActive, { req }) => {
+    // isActive is optional, but if provided, validate it
+    if (isActive !== undefined && isActive !== null) {
+      // Check if it's a boolean
+      if (typeof isActive !== "boolean") {
+        throw new Error("isActive must be a boolean value");
+      }
+    }
+
+    return true;
+  }),
+
+  handleValidationErrors,
+];
+
+/**
+ * Combined validation middleware for creating blog categories
+ */
+const createBlogCategoryValidation = [
+  sanitizeInput,
+  ...validateCreateBlogCategory,
+];
+
+/**
+ * Combined validation middleware for updating blog categories
+ */
+const updateBlogCategoryValidation = [
+  sanitizeInput,
+  ...validateObjectId,
+  ...validateUpdateBlogCategory,
+];
+
 module.exports = {
   handleValidationErrors,
   loginValidation,
   changePasswordValidation,
   createPropertyWithImagesValidation,
-  createPropertyWithoutImagesValidation,
   updatePropertyValidation,
   propertyQueryValidation,
   singlePropertyValidation,
@@ -2826,4 +3466,16 @@ module.exports = {
   // Property approval validations
   validatePropertyId,
   validateRejection,
+  // Category approval validations
+  validateCategoryId,
+  // Blog validations
+  createBlogValidation,
+  updateBlogValidation,
+  blogQueryValidation,
+  singleBlogValidation,
+  // Blog category validations
+  createBlogCategoryValidation,
+  updateBlogCategoryValidation,
+  blogCategoryQueryValidation,
+  singleBlogCategoryValidation,
 };

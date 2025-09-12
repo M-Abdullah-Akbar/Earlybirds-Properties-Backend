@@ -4,7 +4,7 @@ const helmet = require("helmet");
 const compression = require("compression");
 const path = require("path");
 require("dotenv").config({
-  path: process.env.NODE_ENV === "production" ? "./backend/.env" : "./backend/.env",
+  path: process.env.NODE_ENV === "production" ? "./.env" : "./backend/.env",
 });
 const { connectDB } = require("./config/database.js");
 
@@ -15,6 +15,9 @@ const propertyApprovalRoutes = require("./routes/propertyApproval");
 const uploadRoutes = require("./routes/upload");
 const userRoutes = require("./routes/users");
 const emailRoutes = require("./routes/email");
+const blogRoutes = require("./routes/blogs");
+const blogCategoryRoutes = require("./routes/blogCategories");
+const blogCategoryApprovalRoutes = require("./routes/blogCategoryApproval");
 const errorHandler = require("./middleware/errorHandler.js");
 
 const app = express();
@@ -26,14 +29,9 @@ const allowedOrigins = [
   process.env.Admin_URL,
   process.env.User_URL,
   process.env.BASE_URL,
-  "https://earlybirds-properties-backend.vercel.app",
-  "https://singular-cupcake-772ab9.netlify.app",
-  "https://vocal-genie-167c56.netlify.app",
   "http://localhost:3000",
   "http://localhost:3001",
 ].filter(Boolean); // Remove any undefined values
-
-console.log("🔧 CORS: Allowed origins:", allowedOrigins);
 
 app.use(
   cors({
@@ -83,6 +81,8 @@ app.get("/api", (req, res) => {
     endpoints: {
       auth: "/api/auth",
       properties: "/api/properties",
+      blogs: "/api/blogs",
+      blogCategories: "/api/blog-categories",
     },
   });
 });
@@ -94,6 +94,9 @@ app.use("/api/property-approval", propertyApprovalRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/blogs", blogRoutes);
+app.use("/api/blog-categories", blogCategoryRoutes);
+app.use("/api/blog-category-approval", blogCategoryApprovalRoutes);
 
 app.use(errorHandler);
 
