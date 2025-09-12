@@ -98,7 +98,7 @@ const blogSchema = new mongoose.Schema(
 // Create slug from title before saving
 blogSchema.pre("save", function (next) {
   if (this.isModified("title") || this.isNew) {
-    this.slug = this.title
+    this.slug = (this.title || "")
       .toLowerCase()
       .replace(/[^a-zA-Z0-9\s]/g, "")
       .replace(/\s+/g, "-")

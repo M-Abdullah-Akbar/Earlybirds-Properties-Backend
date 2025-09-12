@@ -67,7 +67,7 @@ blogCategorySchema.pre("save", function (next) {
 // Create slug from name before saving
 blogCategorySchema.pre("save", function (next) {
   if (this.isModified("name") || this.isNew) {
-    this.slug = this.name
+    this.slug = (this.name || "")
       .toLowerCase()
       .replace(/[^a-zA-Z0-9\s]/g, "")
       .replace(/\s+/g, "-")

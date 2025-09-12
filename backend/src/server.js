@@ -4,7 +4,9 @@ const helmet = require("helmet");
 const compression = require("compression");
 const path = require("path");
 require("dotenv").config({
-  path: process.env.NODE_ENV === "production" ? "./.env" : "./backend/.env",
+  path: process.env.NODE_ENV === "production" 
+    ? path.resolve(__dirname, "./.env") 
+    : path.resolve(__dirname, "./backend/.env"),
 });
 const { connectDB } = require("./config/database.js");
 
@@ -29,7 +31,6 @@ const allowedOrigins = [
   process.env.Admin_URL,
   process.env.User_URL,
   process.env.BASE_URL,
-  
   "http://localhost:3000",
   "http://localhost:3001",
 ].filter(Boolean); // Remove any undefined values
