@@ -71,7 +71,7 @@ app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 app.use(compression());
 
 // Serve static files from uploads directory
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Request logging middleware
 app.use((req, res, next) => {
