@@ -3,10 +3,13 @@ const router = express.Router();
 const {
   getBlogs,
   getBlog,
+  createBlog,
   createBlogWithImages,
+  updateBlogSimple,
   updateBlog,
   deleteBlog,
   deleteBlogImage,
+  setMainBlogImage,
 } = require("../controllers/blogController");
 
 // Import middleware
@@ -18,10 +21,11 @@ const {
   processValidatedImages,
 } = require("../middleware/imageUpload");
 const {
-  createBlogValidation,
-  updateBlogValidation,
-  blogQueryValidation,
-  singleBlogValidation,
+  // Validation middleware removed - backend validations disabled
+  // createBlogValidation,
+  // updateBlogValidation,
+  // blogQueryValidation,
+  // singleBlogValidation,
   parseEnhancedFormData,
 } = require("../middleware/validation");
 
@@ -38,11 +42,30 @@ router.delete(
 );
 
 /**
+ * @route   PUT /api/blogs/:id/images/:imageId/main
+ * @desc    Set image as main blog image
+ * @access  Admin only
+ */
+router.put(
+  "/:id/images/:imageId/main",
+  auth,
+  checkPermission("blogs", "Update"),
+  setMainBlogImage
+);
+
+/**
  * @route   GET /api/blogs
  * @desc    Get all blogs with filtering and pagination
  * @access  Public (visitors see published only) / Admin (sees all)
  */
 router.get("/", optionalAuth, checkPermission("blogs", "Read"), getBlogs);
+
+/**
+ * @route   POST /api/blogs
+ * @desc    Create blog (simple JSON)
+ * @access  Admin only
+ */
+router.post("/", auth, checkPermission("blogs", "Create"), createBlog);
 
 /**
  * @route   POST /api/blogs/with-images
@@ -55,7 +78,7 @@ router.post(
   checkPermission("blogs", "Create"),
   parseMultipartData,
   parseEnhancedFormData,
-  createBlogValidation,
+  // createBlogValidation, // Validation disabled
   processValidatedImages,
   createBlogWithImages
 );
@@ -70,23 +93,31 @@ router
   .get(optionalAuth, checkPermission("blogs", "Read"), getBlog)
   /**
    * @route   PUT /api/blogs/:id
-   * @desc    Update blog (handles both form data and images, same as create)
+   * @desc    Update blog (simple JSON)
    * @access  Admin only
    */
-  .put(
-    auth,
-    checkPermission("blogs", "Update"),
-    parseMultipartData,
-    parseEnhancedFormData,
-    updateBlogValidation,
-    processValidatedImages,
-    updateBlog
-  )
+  .put(auth, checkPermission("blogs", "Update"), updateBlogSimple)
   /**
    * @route   DELETE /api/blogs/:id
    * @desc    Delete blog
    * @access  Admin only
    */
   .delete(auth, checkPermission("blogs", "Delete"), deleteBlog);
+
+/**
+ * @route   PUT /api/blogs/:id/with-images
+ * @desc    Update blog (handles both form data and images, same as create)
+ * @access  Admin only
+ */
+router.put(
+  "/:id/with-images",
+  auth,
+  checkPermission("blogs", "Update"),
+  parseMultipartData,
+  parseEnhancedFormData,
+  // updateBlogValidation, // Validation disabled
+  processValidatedImages,
+  updateBlog
+);
 
 module.exports = router;

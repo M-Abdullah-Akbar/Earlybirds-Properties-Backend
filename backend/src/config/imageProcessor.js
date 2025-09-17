@@ -30,10 +30,6 @@ const processImage = async (imageBuffer, options = {}) => {
     // Use the requested quality directly
     const smartQuality = quality;
 
-    console.log(
-      `🔧 Sharp processing: ${metadata.width}x${metadata.height} → WebP at ${smartQuality}% quality`
-    );
-
     let sharpInstance = sharp(imageBuffer);
 
     // Apply pre-processing optimizations for better compression
@@ -82,14 +78,6 @@ const processImage = async (imageBuffer, options = {}) => {
     sharpInstance = sharpInstance.webp(webpOptions).withMetadata(false); // Strip all metadata to save additional bytes
 
     const processedBuffer = await sharpInstance.toBuffer();
-
-    console.log(
-      `🔧 Sharp result: ${imageBuffer.length} → ${
-        processedBuffer.length
-      } bytes (${Math.round(
-        (1 - processedBuffer.length / imageBuffer.length) * 100
-      )}% reduction)`
-    );
 
     return processedBuffer;
   } catch (error) {

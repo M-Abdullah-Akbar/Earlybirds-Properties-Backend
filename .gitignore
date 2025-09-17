@@ -10,6 +10,7 @@ backend/src/SampleJPGImage_10mbmb.jpg
 
 # Environment variables
 backend/.env
+backend/.env.production
 
 # Logs
 *.log
@@ -39,17 +40,8 @@ Thumbs.db
 # Development tools
 .zencoder/
 
-
-# Documentation
-VERCEL_DEPLOYMENT.md
-CORS_TROUBLESHOOTING.md
-
-# Config files
-.babelrc
-webpack.config.js
-
-# dist
+#dist
 dist
 
-# package-lock.json
-package-lock.json
+# environment_setup
+ENVIRONMENT_SETUP.md

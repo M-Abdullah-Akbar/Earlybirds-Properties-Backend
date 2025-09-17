@@ -7,10 +7,7 @@ dns.setServers(["8.8.8.8", "8.8.4.4"]);
 // Connect to MongoDB with enhanced error handling
 const connectDB = async () => {
   try {
-    const Db = process.env.DATABASE.replace(
-      "<PASSWORD>",
-      process.env.DATABASE_PASSWORD
-    );
+    const Db = process.env.DATABASE;
 
     // // Enhanced connection options for better reliability
     // const connectionOptions = {

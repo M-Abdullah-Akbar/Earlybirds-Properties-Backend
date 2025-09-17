@@ -25,10 +25,11 @@ const {
   processValidatedImages,
 } = require("../middleware/imageUpload");
 const {
-  createPropertyWithImagesValidation,
-  updatePropertyValidation,
-  propertyQueryValidation,
-  singlePropertyValidation,
+  // Validation middleware removed - backend validations disabled
+  // createPropertyWithImagesValidation,
+  // updatePropertyValidation,
+  // propertyQueryValidation,
+  // singlePropertyValidation,
   parseFormDataOnly,
   parsePropertyDataFromFormData,
   parseEnhancedFormData,
@@ -88,7 +89,7 @@ router.get(
   "/",
   optionalAuth,
   checkPermission("properties", "Read"),
-  propertyQueryValidation,
+  // propertyQueryValidation, // Validation disabled
   getProperties
 );
 
@@ -103,7 +104,7 @@ router.post(
   checkPermission("properties", "Create"),
   parseMultipartData,
   parseEnhancedFormData,
-  createPropertyWithImagesValidation,
+  // createPropertyWithImagesValidation, // Validation disabled
   processValidatedImages,
   createPropertyWithImages
 );
@@ -118,7 +119,7 @@ router
   .get(
     optionalAuth,
     checkPermission("properties", "Read"),
-    singlePropertyValidation,
+    // singlePropertyValidation, // Validation disabled
     getProperty
   )
   /**
@@ -131,7 +132,7 @@ router
     checkPermission("properties", "Update"),
     parseMultipartData,
     parseEnhancedFormData,
-    updatePropertyValidation,
+    // updatePropertyValidation, // Validation disabled
     processValidatedImages,
     updateProperty
   )
@@ -143,7 +144,7 @@ router
   .delete(
     auth,
     checkPermission("properties", "Delete"),
-    singlePropertyValidation,
+    // singlePropertyValidation, // Validation disabled
     deleteProperty
   );
 

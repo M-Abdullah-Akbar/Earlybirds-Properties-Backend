@@ -4,11 +4,11 @@
   "description": "Real Estate Website Backend API",
   "main": "src/server.js",
   "scripts": {
-    "start": "node backend/src/server.js",
-    "start:prod": "node dist/server.js",
-    "build": "webpack --mode production",
-    "build:dev": "webpack --mode development",
-    "create-superadmin": "node backend/src/scripts/createSuperAdmin.js"
+    "start": "set NODE_ENV=development&& node backend/src/server.js",
+    "start:prod": "set NODE_ENV=production&& node dist/server.js",
+    "build": "set NODE_ENV=production&& webpack --mode production",
+    "build:dev": "set NODE_ENV=development&& webpack --mode development",
+    "create-superadmin": "set NODE_ENV=development&& node backend/src/scripts/createSuperAdmin.js"
   },
   "repository": {
     "type": "git",

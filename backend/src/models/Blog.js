@@ -1,39 +1,5 @@
 const mongoose = require("mongoose");
 
-// Image schema for blog images (same as Property model)
-const imageSchema = new mongoose.Schema(
-  {
-    url: {
-      type: String,
-      required: true,
-    },
-    publicId: {
-      type: String, // For local file identification
-      required: true,
-    },
-    altText: {
-      type: String,
-      default: "",
-    },
-    order: {
-      type: Number,
-      default: 0,
-    },
-    isMain: {
-      type: Boolean,
-      default: false,
-    },
-    // Original file info
-    originalName: String,
-    size: Number, // Compressed file size after processing
-    originalSize: Number, // Original file size before compression
-    format: String,
-  },
-  {
-    _id: true,
-  }
-);
-
 const blogSchema = new mongoose.Schema(
   {
     title: {
@@ -81,10 +47,13 @@ const blogSchema = new mongoose.Schema(
     featuredImage: {
       type: String,
     },
-    images: {
-      type: [imageSchema],
-      default: [],
-    },
+    images: [
+      {
+        url: String,
+        alt: String,
+        caption: String,
+      },
+    ],
 
     publishedAt: {
       type: Date,
@@ -98,7 +67,7 @@ const blogSchema = new mongoose.Schema(
 // Create slug from title before saving
 blogSchema.pre("save", function (next) {
   if (this.isModified("title") || this.isNew) {
-    this.slug = (this.title || "")
+    this.slug = this.title
       .toLowerCase()
       .replace(/[^a-zA-Z0-9\s]/g, "")
       .replace(/\s+/g, "-")

@@ -237,6 +237,64 @@ const getBlog = async (req, res) => {
 };
 
 /**
+ * Create new blog
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const createBlog = async (req, res) => {
+  try {
+    // Additional admin role check
+    if (
+      !req.user ||
+      (req.user.role !== "admin" && req.user.role !== "SuperAdmin")
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: "Access denied. Admin privileges required.",
+      });
+    }
+
+    const blogData = req.body;
+
+    // Verify category exists if provided
+    if (blogData.category) {
+      const category = await BlogCategory.findById(blogData.category);
+      if (!category) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid category ID",
+        });
+      }
+    }
+
+    // Create blog
+    const blog = new Blog({
+      ...blogData,
+      author: req.user.id,
+    });
+
+    await blog.save();
+
+    // Populate the response
+    const populatedBlog = await Blog.findById(blog._id)
+      .populate("category", "name slug color")
+      .populate("author", "name email");
+
+    res.status(201).json({
+      success: true,
+      data: { blog: populatedBlog },
+      message: "Blog created successfully",
+    });
+  } catch (error) {
+    console.error("Error creating blog:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to create blog",
+    });
+  }
+};
+
+/**
  * Create new blog with images
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -254,24 +312,8 @@ const createBlogWithImages = async (req, res) => {
       });
     }
 
-    const blogData = req.validatedData || req.body;
+    const blogData = req.validatedData;
     const processedImages = req.processedImages || [];
-
-    // Validate status if provided
-    if (blogData.status) {
-      const allowedStatuses = ["draft", "published", "archived"];
-      if (!allowedStatuses.includes(blogData.status)) {
-        return res.status(400).json({
-          success: false,
-          error: "Invalid status. Allowed values: draft, published, archived",
-        });
-      }
-    }
-
-    // Handle empty string category (convert to null for optional field)
-    if (blogData.category === "") {
-      blogData.category = null;
-    }
 
     // Verify category exists
     if (blogData.category) {
@@ -325,27 +367,14 @@ const createBlogWithImages = async (req, res) => {
 };
 
 /**
- * Update blog (unified - handles both JSON and FormData)
+ * Update blog (simple JSON version)
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const updateBlog = async (req, res) => {
+const updateBlogSimple = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Check if this is a FormData request (with images) or JSON request (simple update)
-    const isFormDataRequest =
-      req.processedImages !== undefined || req.validatedData !== undefined;
-    const blogData = isFormDataRequest
-      ? req.validatedData || req.body
-      : req.body;
-    const processedImages = req.processedImages || [];
-
-    console.log(
-      `🔄 Blog Update - Request type: ${
-        isFormDataRequest ? "FormData (with images)" : "JSON (simple)"
-      }`
-    );
+    const blogData = req.body;
 
     // Find existing blog
     const existingBlog = await Blog.findById(id);
@@ -367,33 +396,72 @@ const updateBlog = async (req, res) => {
       });
     }
 
-    // Validate status transitions
-    if (blogData.status && blogData.status !== existingBlog.status) {
-      const currentStatus = existingBlog.status;
-      const newStatus = blogData.status;
-
-      // Once a blog is published or archived, it cannot go back to draft
-      if (currentStatus !== "draft" && newStatus === "draft") {
+    // Verify category exists if being updated
+    if (blogData.category) {
+      const category = await BlogCategory.findById(blogData.category);
+      if (!category) {
         return res.status(400).json({
           success: false,
-          error:
-            "Cannot change status from published or archived back to draft",
-        });
-      }
-
-      // Validate allowed status values
-      const allowedStatuses = ["draft", "published", "archived"];
-      if (!allowedStatuses.includes(newStatus)) {
-        return res.status(400).json({
-          success: false,
-          error: "Invalid status. Allowed values: draft, published, archived",
+          error: "Invalid category ID",
         });
       }
     }
 
-    // Handle empty string category (convert to null for optional field)
-    if (blogData.category === "" || blogData.category === null) {
-      blogData.category = null;
+    // Update blog
+    const updatedBlog = await Blog.findByIdAndUpdate(
+      id,
+      {
+        ...blogData,
+        updatedAt: new Date(),
+      },
+      { new: true, runValidators: true }
+    )
+      .populate("category", "name slug color")
+      .populate("author", "name email");
+
+    res.status(200).json({
+      success: true,
+      data: { blog: updatedBlog },
+      message: "Blog updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating blog:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to update blog",
+    });
+  }
+};
+
+/**
+ * Update blog (with images)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const updateBlog = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const blogData = req.validatedData || req.body;
+    const processedImages = req.processedImages || [];
+
+    // Find existing blog
+    const existingBlog = await Blog.findById(id);
+    if (!existingBlog) {
+      return res.status(404).json({
+        success: false,
+        error: "Blog not found",
+      });
+    }
+
+    // Check permissions
+    if (
+      req.user.role !== "SuperAdmin" &&
+      existingBlog.author.toString() !== req.user.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: "Access denied. You can only update your own blogs.",
+      });
     }
 
     // Verify category exists if being updated
@@ -407,145 +475,32 @@ const updateBlog = async (req, res) => {
       }
     }
 
-    // Handle image updates only for FormData requests
-    if (isFormDataRequest) {
-      let finalImages = [];
-      let imageUpdateRequested = false;
+    // Handle image updates
+    let updatedImages = existingBlog.images || [];
 
-      // Handle existing images that should be kept
-      if (blogData.existingImages !== undefined) {
-        imageUpdateRequested = true;
-        try {
-          const existingImages = JSON.parse(blogData.existingImages);
-          if (Array.isArray(existingImages)) {
-            finalImages = [...existingImages];
-            console.log(
-              `📷 Blog: Keeping ${existingImages.length} existing images`
-            );
-          }
-        } catch (error) {
-          console.error("❌ Blog: Error parsing existingImages:", error);
-        }
-      }
-
-      // Handle new uploaded images
-      if (processedImages.length > 0) {
-        imageUpdateRequested = true;
-        console.log(`📷 Blog: Adding ${processedImages.length} new images`);
-        finalImages = [...finalImages, ...processedImages];
-      }
-
-      // Process images if any image update was requested
-      if (imageUpdateRequested) {
-        // Find images that were removed and delete them from local storage
-        // Handle both old format (without publicId) and new format (with publicId)
-        const currentImageIds = existingBlog.images
-          .map((img) => img.publicId || img.url) // Fallback to url for old format
-          .filter(Boolean); // Remove any undefined/null values
-
-        const finalImageIds = finalImages
-          .map((img) => img.publicId || img.url) // Fallback to url for old format
-          .filter(Boolean); // Remove any undefined/null values
-
-        const removedImageIds = currentImageIds.filter(
-          (id) => !finalImageIds.includes(id)
-        );
-
-        if (removedImageIds.length > 0) {
-          console.log(
-            `🗑️ BLOG UPDATE DEBUG - Found ${removedImageIds.length} images to delete:`,
-            removedImageIds
-          );
-
-          // Delete removed images from local storage
-          const deletePromises = removedImageIds.map(async (imageId) => {
-            try {
-              // For old format, imageId might be a URL, extract filename
-              let publicId = imageId;
-              if (imageId.includes("/")) {
-                // Extract filename from URL for old format
-                const urlParts = imageId.split("/");
-                publicId = urlParts[urlParts.length - 1];
-                // Remove file extension if present
-                const dotIndex = publicId.lastIndexOf(".");
-                if (dotIndex > 0) {
-                  publicId = publicId.substring(0, dotIndex);
-                }
-              }
-
-              await deleteLocalImageFiles(publicId);
-              console.log(
-                `✅ Successfully deleted local files for removed blog image: ${imageId} (publicId: ${publicId})`
-              );
-            } catch (error) {
-              console.error(
-                `❌ Failed to delete local files for blog image ${imageId}:`,
-                error
-              );
-              // Continue with update even if image deletion fails
-            }
-          });
-
-          await Promise.allSettled(deletePromises);
-        }
-
-        // Update blog with image changes
-        const updatedBlog = await Blog.findByIdAndUpdate(
-          id,
-          {
-            ...blogData,
-            images: finalImages,
-            updatedAt: new Date(),
-          },
-          { new: true, runValidators: true }
-        )
-          .populate("category", "name slug color")
-          .populate("author", "name email");
-
-        res.status(200).json({
-          success: true,
-          data: { blog: updatedBlog },
-          message: "Blog updated successfully",
-        });
-      } else {
-        // No image updates - keep existing images
-        const updatedBlog = await Blog.findByIdAndUpdate(
-          id,
-          {
-            ...blogData,
-            images: existingBlog.images,
-            updatedAt: new Date(),
-          },
-          { new: true, runValidators: true }
-        )
-          .populate("category", "name slug color")
-          .populate("author", "name email");
-
-        res.status(200).json({
-          success: true,
-          data: { blog: updatedBlog },
-          message: "Blog updated successfully",
-        });
-      }
-    } else {
-      // Simple JSON update - no image processing
-      const updatedBlog = await Blog.findByIdAndUpdate(
-        id,
-        {
-          ...blogData,
-          updatedAt: new Date(),
-        },
-        { new: true, runValidators: true }
-      )
-        .populate("category", "name slug color")
-        .populate("author", "name email");
-
-      res.status(200).json({
-        success: true,
-        data: { blog: updatedBlog },
-        message: "Blog updated successfully",
-      });
+    if (processedImages.length > 0) {
+      // Add new images
+      updatedImages = [...updatedImages, ...processedImages];
     }
+
+    // Update blog
+    const updatedBlog = await Blog.findByIdAndUpdate(
+      id,
+      {
+        ...blogData,
+        images: updatedImages,
+        updatedAt: new Date(),
+      },
+      { new: true, runValidators: true }
+    )
+      .populate("category", "name slug color")
+      .populate("author", "name email");
+
+    res.status(200).json({
+      success: true,
+      data: { blog: updatedBlog },
+      message: "Blog updated successfully",
+    });
   } catch (error) {
     console.error("Error updating blog:", error);
 
@@ -608,23 +563,7 @@ const deleteBlog = async (req, res) => {
     // Clean up image files
     for (const image of imagesToDelete) {
       try {
-        // Handle both old format (without publicId) and new format (with publicId)
-        let publicId = image.publicId || image.url;
-
-        if (publicId && publicId.includes("/")) {
-          // Extract filename from URL for old format
-          const urlParts = publicId.split("/");
-          publicId = urlParts[urlParts.length - 1];
-          // Remove file extension if present
-          const dotIndex = publicId.lastIndexOf(".");
-          if (dotIndex > 0) {
-            publicId = publicId.substring(0, dotIndex);
-          }
-        }
-
-        if (publicId) {
-          await deleteLocalImageFiles(publicId);
-        }
+        await deleteLocalImageFiles(image.publicId);
       } catch (cleanupError) {
         console.error("Error cleaning up image:", cleanupError);
       }
@@ -664,7 +603,7 @@ const deleteBlogImage = async (req, res) => {
     // Check permissions
     if (
       req.user.role !== "SuperAdmin" &&
-      blog.createdBy.toString() !== req.user.id
+      blog.author.toString() !== req.user.id
     ) {
       return res.status(403).json({
         success: false,
@@ -688,30 +627,13 @@ const deleteBlogImage = async (req, res) => {
 
     // Remove image from array
     blog.images.splice(imageIndex, 1);
-    blog.updatedBy = req.user.id;
-    blog.updatedAt = new Date();
+    // updatedAt is automatically handled by Mongoose timestamps
 
     await blog.save();
 
     // Delete physical file
     try {
-      // Handle both old format (without publicId) and new format (with publicId)
-      let publicId = imageToDelete.publicId || imageToDelete.url;
-
-      if (publicId && publicId.includes("/")) {
-        // Extract filename from URL for old format
-        const urlParts = publicId.split("/");
-        publicId = urlParts[urlParts.length - 1];
-        // Remove file extension if present
-        const dotIndex = publicId.lastIndexOf(".");
-        if (dotIndex > 0) {
-          publicId = publicId.substring(0, dotIndex);
-        }
-      }
-
-      if (publicId) {
-        await deleteLocalImageFiles(publicId);
-      }
+      await deleteLocalImageFiles(imageToDelete.publicId);
     } catch (cleanupError) {
       console.error("Error cleaning up image file:", cleanupError);
     }
@@ -729,11 +651,77 @@ const deleteBlogImage = async (req, res) => {
   }
 };
 
+/**
+ * Set image as main blog image
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const setMainBlogImage = async (req, res) => {
+  try {
+    const { id, imageId } = req.params;
+
+    // Find blog
+    const blog = await Blog.findById(id);
+    if (!blog) {
+      return res.status(404).json({
+        success: false,
+        error: "Blog not found",
+      });
+    }
+
+    // Check permissions
+    if (
+      req.user.role !== "SuperAdmin" &&
+      blog.author.toString() !== req.user.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: "Access denied. You can only modify your own blogs.",
+      });
+    }
+
+    // Find image
+    const imageIndex = blog.images.findIndex(
+      (img) => img._id.toString() === imageId
+    );
+
+    if (imageIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: "Image not found",
+      });
+    }
+
+    // Set all images to not main, then set the selected one as main
+    blog.images.forEach((img, index) => {
+      img.isMain = index === imageIndex;
+    });
+
+    // updatedAt is automatically handled by Mongoose timestamps
+
+    await blog.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Main image updated successfully",
+    });
+  } catch (error) {
+    console.error("Error setting main blog image:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to set main image",
+    });
+  }
+};
+
 module.exports = {
   getBlogs,
   getBlog,
+  createBlog,
   createBlogWithImages,
+  updateBlogSimple,
   updateBlog,
   deleteBlog,
   deleteBlogImage,
+  setMainBlogImage,
 };

@@ -29,13 +29,14 @@ module.exports = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      "process.env.NODE_ENV": JSON.stringify("production"),
+      "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "production"),
     }),
     new CopyPlugin({
       patterns: [
         {
-          from: "backend/.env",
-          to: "[name][ext]",
+          from: process.env.NODE_ENV === "development" ? "backend/.env" : "backend/.env.production",
+          to: ".env",
+          toType: "file",
           noErrorOnMissing: true,
         },
         {

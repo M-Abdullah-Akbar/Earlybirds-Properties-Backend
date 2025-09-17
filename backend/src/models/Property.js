@@ -48,16 +48,16 @@ const locationSchema = new mongoose.Schema(
   {
     address: {
       type: String,
-      required: false, // Made optional
+      required: true,
     },
     emirate: {
       type: String,
-      required: false, // Made optional
-      enum: [...EMIRATES, ""], // Allow empty string
+      required: true,
+      enum: EMIRATES,
     },
     area: {
       type: String,
-      required: false, // Made optional
+      required: true,
       enum: [], // This will be populated dynamically based on the selected emirate
     },
     country: {
@@ -82,11 +82,11 @@ const detailsSchema = new mongoose.Schema(
     },
     bathrooms: {
       type: Number,
-      required: false, // Made optional
+      required: true,
     },
     area: {
       type: Number,
-      required: false, // Made optional
+      required: true,
     },
     areaUnit: {
       type: String,
@@ -130,8 +130,7 @@ const propertySchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: false, // Made optional
-      default: undefined, // Explicitly no default
+      required: true,
     },
     slug: {
       type: String,
@@ -141,16 +140,18 @@ const propertySchema = new mongoose.Schema(
     },
     description: {
       type: String,
-      required: false, // Made optional
+      required: true,
     },
     propertyType: {
       type: String,
-      required: false, // Made optional
-      default: undefined, // Explicitly no default
+      required: true,
     },
     price: {
       type: Number,
-      required: false, // Made optional (was conditional, now always optional)
+      required: function () {
+        // Price is not required for "off plan" listing type
+        return this.listingType !== "off plan";
+      },
     },
     currency: {
       type: String,
@@ -164,11 +165,11 @@ const propertySchema = new mongoose.Schema(
     },
     location: {
       type: locationSchema,
-      required: false, // Made optional
+      required: true,
     },
     details: {
       type: detailsSchema,
-      required: false, // Made optional
+      required: true,
     },
     amenities: {
       type: [String],
@@ -176,7 +177,7 @@ const propertySchema = new mongoose.Schema(
     },
     images: {
       type: [imageSchema],
-      required: false, // Made optional
+      required: true,
     },
     featured: {
       type: Boolean,
@@ -194,14 +195,13 @@ const propertySchema = new mongoose.Schema(
     },
     listingType: {
       type: String,
-      enum: [...LISTING_TYPES, ""], // Allow empty string
-      required: false, // Made optional
-      default: undefined, // Explicitly no default
+      enum: LISTING_TYPES,
+      required: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true, // Keep this required for audit purposes
+      required: true,
     },
     // Manual timestamp management (similar to approval system)
     createdAt: {
@@ -266,24 +266,16 @@ propertySchema.index({
 // Generate slug before saving
 propertySchema.pre("save", function (next) {
   if (this.isModified("title") || this.isNew || !this.slug) {
-    // If title exists, use it for slug generation
-    if (this.title && this.title.trim()) {
-      this.slug = slugify(this.title, {
-        lower: true,
-        strict: true,
-        remove: /[*+~.()'"!:@]/g,
-      });
-    } else {
-      // If no title, generate a slug using the property ID or timestamp
-      const timestamp = Date.now();
-      this.slug = `property-${timestamp}`;
-    }
+    this.slug = slugify(this.title, {
+      lower: true,
+      strict: true,
+      remove: /[*+~.()'"!:@]/g,
+    });
   }
 
   // Ensure slug is always present
   if (!this.slug) {
-    const timestamp = Date.now();
-    this.slug = `property-${timestamp}`;
+    return next(new Error("Failed to generate slug"));
   }
 
   next();

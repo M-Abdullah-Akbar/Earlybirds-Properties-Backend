@@ -547,125 +547,13 @@ const getProperty = async (req, res) => {
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-/**
- * Helper function to clean property data before saving
- * Removes empty strings and invalid values that would cause validation errors
- */
-const cleanPropertyData = (data) => {
-  const cleaned = { ...data };
-
-  // Clean price - convert "NaN" or empty strings to undefined
-  if (
-    cleaned.price === "NaN" ||
-    cleaned.price === "" ||
-    cleaned.price === null
-  ) {
-    delete cleaned.price;
-  } else if (typeof cleaned.price === "string" && cleaned.price.trim() !== "") {
-    const parsedPrice = parseFloat(cleaned.price);
-    if (!isNaN(parsedPrice)) {
-      cleaned.price = parsedPrice;
-    } else {
-      delete cleaned.price;
-    }
-  }
-
-  // Keep enum fields as empty strings instead of deleting them
-  // This prevents Mongoose from applying any defaults
-  if (cleaned.listingType === "") {
-    cleaned.listingType = "";
-  }
-
-  if (cleaned.propertyType === "") {
-    cleaned.propertyType = "";
-  }
-
-  // Clean location fields
-  if (cleaned.location) {
-    if (cleaned.location.emirate === "") {
-      delete cleaned.location.emirate;
-    }
-    if (cleaned.location.area === "") {
-      delete cleaned.location.area;
-    }
-    if (cleaned.location.address === "") {
-      delete cleaned.location.address;
-    }
-    if (cleaned.location.neighborhood === "") {
-      delete cleaned.location.neighborhood;
-    }
-  }
-
-  // Keep title and description as empty strings instead of deleting them
-  // This prevents any defaults from being applied
-  if (cleaned.title === "") {
-    cleaned.title = "";
-  }
-
-  if (cleaned.description === "") {
-    cleaned.description = "";
-  }
-
-  // Clean details fields
-  if (cleaned.details) {
-    if (cleaned.details.bedrooms === "" || cleaned.details.bedrooms === null) {
-      delete cleaned.details.bedrooms;
-    }
-    if (
-      cleaned.details.bathrooms === "" ||
-      cleaned.details.bathrooms === null
-    ) {
-      delete cleaned.details.bathrooms;
-    }
-    if (cleaned.details.area === "" || cleaned.details.area === null) {
-      delete cleaned.details.area;
-    }
-    if (cleaned.details.floorLevel === "") {
-      delete cleaned.details.floorLevel;
-    }
-    if (
-      cleaned.details.totalFloors === "" ||
-      cleaned.details.totalFloors === null
-    ) {
-      delete cleaned.details.totalFloors;
-    }
-    if (cleaned.details.landArea === "" || cleaned.details.landArea === null) {
-      delete cleaned.details.landArea;
-    }
-    if (
-      cleaned.details.yearBuilt === "" ||
-      cleaned.details.yearBuilt === null
-    ) {
-      delete cleaned.details.yearBuilt;
-    }
-
-    // Clean parking fields
-    if (cleaned.details.parking) {
-      if (cleaned.details.parking.type === "") {
-        delete cleaned.details.parking.type;
-      }
-      if (
-        cleaned.details.parking.spaces === "" ||
-        cleaned.details.parking.spaces === null
-      ) {
-        delete cleaned.details.parking.spaces;
-      }
-    }
-  }
-
-  return cleaned;
-};
-
 const createPropertyWithImages = async (req, res) => {
   try {
     // ACL middleware has already verified admin permissions
-    let propertyData = {
+    const propertyData = {
       ...req.body,
       createdBy: req.user.id,
     };
-
-    // Clean the property data to remove empty strings and invalid values
-    propertyData = cleanPropertyData(propertyData);
 
     // Set approval status based on property status and user role
     // Draft properties should not be in approval workflow
@@ -699,36 +587,25 @@ const createPropertyWithImages = async (req, res) => {
       imageSource = "pre-processed";
       imageData = req.body.images;
     } else {
-      // Only require images for non-draft properties
-      if (propertyData.status !== "draft") {
-        return res.status(400).json({
-          success: false,
-          error:
-            "At least one property image is required. Either upload image files or provide pre-processed image data.",
-        });
-      }
-      // For draft properties, allow empty images array
-      imageData = [];
+      return res.status(400).json({
+        success: false,
+        error:
+          "At least one property image is required. Either upload image files or provide pre-processed image data.",
+      });
     }
 
-    // Only process images if we have any
-    if (imageData.length > 0) {
-      propertyData.images = imageData.map((image, index) => {
-        return {
-          url: image.url, // Use image URL
-          publicId: image.publicId,
-          altText: image.altText || `Property image ${index + 1}`,
-          order: image.order !== undefined ? image.order : index,
-          isMain: image.isMain !== undefined ? image.isMain : index === 0,
-          originalName: image.originalName,
-          size: image.size,
-          format: image.format,
-        };
-      });
-    } else {
-      // For draft properties without images
-      propertyData.images = [];
-    }
+    propertyData.images = imageData.map((image, index) => {
+      return {
+        url: image.url, // Use image URL
+        publicId: image.publicId,
+        altText: image.altText || `Property image ${index + 1}`,
+        order: image.order !== undefined ? image.order : index,
+        isMain: image.isMain !== undefined ? image.isMain : index === 0,
+        originalName: image.originalName,
+        size: image.size,
+        format: image.format,
+      };
+    });
 
     const property = new Property(propertyData);
     await property.save();
@@ -1064,12 +941,8 @@ const updateProperty = async (req, res) => {
         }));
       }
 
-      // Validate that at least one image remains after update (except for draft properties)
-      if (
-        finalImages.length === 0 &&
-        updateData.status !== "draft" &&
-        existingProperty.status !== "draft"
-      ) {
+      // Validate that at least one image remains after update
+      if (finalImages.length === 0) {
         return res.status(400).json({
           success: false,
           error: "At least one image is required",
@@ -1091,11 +964,8 @@ const updateProperty = async (req, res) => {
       console.log("📷 No image changes requested, keeping existing images");
     }
 
-    // Clean the update data to remove empty strings and invalid values
-    const cleanedUpdateData = cleanPropertyData(updateData);
-
     // Update the existing property object and save it to trigger pre-save hooks
-    Object.assign(existingProperty, cleanedUpdateData);
+    Object.assign(existingProperty, updateData);
 
     // Save the property to trigger pre-save hooks (including slug generation)
     const property = await existingProperty.save();

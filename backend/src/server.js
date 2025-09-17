@@ -3,11 +3,18 @@ const cors = require("cors");
 const helmet = require("helmet");
 const compression = require("compression");
 const path = require("path");
-require("dotenv").config({
-  path: process.env.NODE_ENV === "production" 
-    ? path.resolve(__dirname, "./.env") 
-    : path.resolve(__dirname, "./backend/.env"),
-});
+// Load environment variables
+const fs = require('fs');
+let envPath = "./backend/.env"; // Default for development
+
+// Check if we're running the built version (from dist folder)
+if (fs.existsSync("./dist/.env")) {
+  envPath = "./dist/.env";
+} else if (fs.existsSync("./.env")) {
+  envPath = "./.env";
+}
+
+require("dotenv").config({ path: envPath });
 const { connectDB } = require("./config/database.js");
 
 // Import routes
@@ -31,6 +38,8 @@ const allowedOrigins = [
   process.env.Admin_URL,
   process.env.User_URL,
   process.env.BASE_URL,
+  "https://vocal-genie-167c56.netlify.app/",
+  "https://singular-cupcake-772ab9.netlify.app/",
   "http://localhost:3000",
   "http://localhost:3001",
 ].filter(Boolean); // Remove any undefined values

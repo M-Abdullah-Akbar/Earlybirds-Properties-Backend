@@ -13,10 +13,11 @@ const { auth } = require("../middleware/auth");
 const optionalAuth = require("../middleware/optionalAuth");
 const { checkPermission } = require("../middleware/acl");
 const {
-  createBlogCategoryValidation,
-  updateBlogCategoryValidation,
-  blogCategoryQueryValidation,
-  singleBlogCategoryValidation,
+  // Validation middleware removed - backend validations disabled
+  // createBlogCategoryValidation,
+  // updateBlogCategoryValidation,
+  // blogCategoryQueryValidation,
+  // singleBlogCategoryValidation,
 } = require("../middleware/validation");
 
 /**
@@ -40,7 +41,7 @@ router.post(
   "/",
   auth,
   checkPermission("blogCategories", "Create"),
-  createBlogCategoryValidation,
+  // createBlogCategoryValidation, // Validation disabled
   createBlogCategory
 );
 
@@ -60,7 +61,7 @@ router
   .put(
     auth,
     checkPermission("blogCategories", "Update"),
-    updateBlogCategoryValidation,
+    // updateBlogCategoryValidation, // Validation disabled
     updateBlogCategory
   )
   /**
