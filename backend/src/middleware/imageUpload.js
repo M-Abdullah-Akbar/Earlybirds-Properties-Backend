@@ -217,10 +217,12 @@ const processValidatedImages = async (req, res, next) => {
         const filepath = path.join(uploadDir, filename);
 
         // Process the image buffer
-        const processedBuffer = await processImage(file.buffer, {
-          quality: 85,
-          format: "webp",
-        });
+        // TODO
+        // const processedBuffer = await processImage(file.buffer, {
+        //   quality: 85,
+        //   format: "webp",
+        // });
+        const processedBuffer = file.buffer;
 
         // Save the processed buffer to disk
         await fs.writeFile(filepath, processedBuffer);
