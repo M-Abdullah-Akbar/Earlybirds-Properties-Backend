@@ -48,16 +48,13 @@ const locationSchema = new mongoose.Schema(
   {
     address: {
       type: String,
-      required: true,
     },
     emirate: {
       type: String,
-      required: true,
       enum: EMIRATES,
     },
     area: {
       type: String,
-      required: true,
       enum: [], // This will be populated dynamically based on the selected emirate
     },
     country: {
@@ -82,11 +79,9 @@ const detailsSchema = new mongoose.Schema(
     },
     bathrooms: {
       type: Number,
-      required: true,
     },
     area: {
       type: Number,
-      required: true,
     },
     areaUnit: {
       type: String,
@@ -144,14 +139,9 @@ const propertySchema = new mongoose.Schema(
     },
     propertyType: {
       type: String,
-      required: true,
     },
     price: {
       type: Number,
-      required: function () {
-        // Price is not required for "off plan" listing type
-        return this.listingType !== "off plan";
-      },
     },
     currency: {
       type: String,
@@ -165,11 +155,9 @@ const propertySchema = new mongoose.Schema(
     },
     location: {
       type: locationSchema,
-      required: true,
     },
     details: {
       type: detailsSchema,
-      required: true,
     },
     amenities: {
       type: [String],

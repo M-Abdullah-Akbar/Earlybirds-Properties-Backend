@@ -320,10 +320,11 @@ const cleanupParkingFields = (req, res, next) => {
 const validateCreateProperty = [
   // Basic property information
   body("title")
+    .optional()
     .custom((title, { req }) => {
-      // Check if title is required (empty string check)
-      if (title === "") {
-        throw new Error("Property title is required");
+      // Skip validation if title is not provided
+      if (!title || title === "") {
+        return true;
       }
       title = title.trim();
 
@@ -340,6 +341,11 @@ const validateCreateProperty = [
       return true;
     })
     .custom(async (title, { req }) => {
+      // Skip validation if title is not provided
+      if (!title || title === "") {
+        return true;
+      }
+      
       // Check for duplicate titles excluding the current property
       const Property = require("../models/Property");
       const propertyId = req.params.id;
@@ -365,11 +371,13 @@ const validateCreateProperty = [
       return true;
     }),
 
-  body("description").custom((description, { req }) => {
-    // Check if description is required (empty string check)
-    if (description === "") {
-      throw new Error("Property description is required");
-    } // Trim the description
+  body("description").optional().custom((description, { req }) => {
+    // Skip validation if description is not provided
+    if (!description || description === "") {
+      return true;
+    }
+    
+    // Trim the description
     description = description.trim();
 
     // Length validation
@@ -383,12 +391,14 @@ const validateCreateProperty = [
   }),
 
   // Property type validation
-  body("propertyType").custom((propertyType, { req }) => {
-    // Check if propertyType is null or undefined
-    if (propertyType == "") {
-      throw new Error("Property type is required");
-    } // Must be string
-    else if (typeof propertyType !== "string") {
+  body("propertyType").optional().custom((propertyType, { req }) => {
+    // Skip validation if propertyType is not provided
+    if (!propertyType || propertyType === "") {
+      return true;
+    }
+    
+    // Must be string
+    if (typeof propertyType !== "string") {
       throw new Error("Property type must be a string");
     } // Format validation
     else if (
@@ -404,20 +414,15 @@ const validateCreateProperty = [
     }
   }),
 
-  body("price").custom((price, { req }) => {
-    // Skip price validation for "off plan" listing type
-    if (req.body.listingType === "off plan") {
+  body("price").optional().custom((price, { req }) => {
+    // Skip validation if price is not provided
+    if (price === null || price === undefined || price === "" || price === "NaN") {
       return true;
     }
 
-    // Check if price is required (null, undefined, empty string, or string "NaN")
-    if (
-      price === null ||
-      price === undefined ||
-      price === "" ||
-      price === "NaN"
-    ) {
-      throw new Error("Price is required");
+    // Skip price validation for "off plan" listing type
+    if (req.body.listingType === "off plan") {
+      return true;
     }
 
     // Convert to number and validate it's a positive float
@@ -434,10 +439,10 @@ const validateCreateProperty = [
 
   // Location validation
 
-  body("location.address").custom((address, { req }) => {
-    // Check if address is required (empty string check)
+  body("location.address").optional().custom((address, { req }) => {
+    // Skip validation if address is not provided
     if (!address || address.trim() === "") {
-      throw new Error("Address is required");
+      return true;
     }
 
     // Trim the address
@@ -455,12 +460,12 @@ const validateCreateProperty = [
     return true;
   }),
 
-  body("location.emirate").notEmpty().withMessage("Emirate is required"),
+  body("location.emirate").optional(),
 
-  body("location.area").custom((value, { req }) => {
-    // Check if area is required (empty string check)
-    if (value === "") {
-      throw new Error("Location area is required");
+  body("location.area").optional().custom((value, { req }) => {
+    // Skip validation if area is not provided
+    if (!value || value === "") {
+      return true;
     }
 
     const emirate = req.body.location?.emirate;
@@ -472,7 +477,12 @@ const validateCreateProperty = [
 
   // Property details validation
 
-  body("details.bedrooms").custom((bedrooms, { req }) => {
+  body("details.bedrooms").optional().custom((bedrooms, { req }) => {
+    // Skip validation if bedrooms is not provided
+    if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
+      return true;
+    }
+
     const propertyType = req.body.propertyType;
 
     // For studio and office property types, bedrooms should not be provided
@@ -487,11 +497,6 @@ const validateCreateProperty = [
       return true;
     }
 
-    // For all other property types, bedrooms are required
-    if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
-      throw new Error("Number of bedrooms is required");
-    }
-
     if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
       throw new Error("Bedrooms must be a non-negative integer");
     }
@@ -499,10 +504,10 @@ const validateCreateProperty = [
     return true;
   }),
 
-  body("details.bathrooms").custom((bathrooms, { req }) => {
-    // Check if bathrooms is required (empty string check)
-    if (bathrooms === null || bathrooms === undefined) {
-      throw new Error("Number of bathrooms is required");
+  body("details.bathrooms").optional().custom((bathrooms, { req }) => {
+    // Skip validation if bathrooms is not provided
+    if (bathrooms === null || bathrooms === undefined || bathrooms === "") {
+      return true;
     }
 
     // Convert to number and validate it's a non-negative integer
@@ -521,10 +526,10 @@ const validateCreateProperty = [
     return true;
   }),
 
-  body("details.area").custom((area, { req }) => {
-    // Check if area is required (empty string check)
-    if (area === null || area === undefined) {
-      throw new Error("Property area is required");
+  body("details.area").optional().custom((area, { req }) => {
+    // Skip validation if area is not provided
+    if (area === null || area === undefined || area === "") {
+      return true;
     }
 
     // Convert to number and validate it's a positive float
@@ -736,14 +741,14 @@ const validateCreateProperty = [
     }),
 
   // Images validation - comprehensive validation for all image fields
-  body("images").custom((images, { req }) => {
-    // Check if images are provided (either as processed images or uploaded files)
+  body("images").optional().custom((images, { req }) => {
+    // Skip validation if images are not provided
     const hasUploadedFiles = req.files && req.files.length > 0;
     const hasProcessedImages =
       images && Array.isArray(images) && images.length > 0;
 
     if (!hasUploadedFiles && !hasProcessedImages) {
-      throw new Error("At least one image is required");
+      return true; // Images are now optional
     }
 
     // If we have uploaded files but no processed images, skip further validation
@@ -859,10 +864,10 @@ const validateCreateProperty = [
     return true;
   }),
 
-  body("listingType").custom((listingType, { req }) => {
-    // Check if listing type is provided
-    if (!listingType) {
-      throw new Error("Listing type is required");
+  body("listingType").optional().custom((listingType, { req }) => {
+    // Skip validation if listingType is not provided
+    if (!listingType || listingType === "") {
+      return true;
     }
 
     const status = req.body.status;
@@ -878,7 +883,7 @@ const validateCreateProperty = [
     return true;
   }),
 
-  body("details.parking.type").custom((parkingType, { req }) => {
+  body("details.parking.type").optional().custom((parkingType, { req }) => {
     const parkingAvailable = req.body.details?.parking?.available;
 
     // Convert string "true"/"false" to boolean for proper comparison
@@ -887,7 +892,7 @@ const validateCreateProperty = [
 
     // If parking is available, type must be specified
     if (isParkingAvailable && (!parkingType || parkingType.trim() === "")) {
-      throw new Error("Parking type is required when parking is available");
+      return true; // Make parking type optional even when parking is available
     } // If parking is not available, type should not be specified
     else if (!isParkingAvailable && parkingType && parkingType.trim() !== "") {
       throw new Error(
@@ -897,7 +902,7 @@ const validateCreateProperty = [
     return true;
   }),
 
-  body("details.parking.spaces").custom((spaces, { req }) => {
+  body("details.parking.spaces").optional().custom((spaces, { req }) => {
     const parkingAvailable = req.body.details?.parking?.available;
 
     // Convert string "true"/"false" to boolean for proper comparison
@@ -908,9 +913,7 @@ const validateCreateProperty = [
     if (isParkingAvailable) {
       // Check if spaces is provided and valid
       if (spaces === null || spaces === undefined || spaces === "") {
-        throw new Error(
-          "Number of parking spaces is required when parking is available"
-        );
+        return true; // Make parking spaces optional even when parking is available
       }
 
       // Convert to number and validate
@@ -955,10 +958,11 @@ const validateCreateProperty = [
 const validateUpdateProperty = [
   // Basic property information
   body("title")
+    .optional()
     .custom((title, { req }) => {
-      // Check if title is required (empty string check)
-      if (title === "") {
-        throw new Error("Property title is required");
+      // Skip validation if title is not provided
+      if (title === null || title === undefined || title === "") {
+        return true;
       }
       title = title.trim();
 
@@ -1000,10 +1004,10 @@ const validateUpdateProperty = [
       return true;
     }),
 
-  body("description").custom((description, { req }) => {
-    // Check if description is required (empty string check)
-    if (description === "") {
-      throw new Error("Property description is required");
+  body("description").optional().custom((description, { req }) => {
+    // Skip validation if description is not provided
+    if (description === null || description === undefined || description === "") {
+      return true;
     }
 
     // Trim the description
@@ -1023,10 +1027,10 @@ const validateUpdateProperty = [
   }),
 
   // Property type validation
-  body("propertyType").custom((propertyType, { req }) => {
-    // Check if propertyType is null or undefined
-    if (propertyType == "") {
-      throw new Error("Property type is required");
+  body("propertyType").optional().custom((propertyType, { req }) => {
+    // Skip validation if propertyType is not provided
+    if (propertyType === null || propertyType === undefined || propertyType === "") {
+      return true;
     } // Must be string
     else if (typeof propertyType !== "string") {
       throw new Error("Property type must be a string");
@@ -1044,15 +1048,15 @@ const validateUpdateProperty = [
     return true;
   }),
 
-  body("price").custom((price, { req }) => {
+  body("price").optional().custom((price, { req }) => {
     // Skip price validation for "off plan" listing type
     if (req.body.listingType === "off plan") {
       return true;
     }
 
-    // Check if price is required (empty string check)
-    if (price === null) {
-      throw new Error("Price is required");
+    // Skip validation if price is not provided
+    if (price === null || price === undefined || price === "") {
+      return true;
     }
 
     // Convert to number and validate it's a positive float
@@ -1069,10 +1073,10 @@ const validateUpdateProperty = [
 
   // Location validation
 
-  body("location.address").custom((address, { req }) => {
-    // Check if address is required (empty string check)
+  body("location.address").optional().custom((address, { req }) => {
+    // Skip validation if address is not provided
     if (!address || address.trim() === "") {
-      throw new Error("Address is required");
+      return true;
     }
 
     // Trim the address
@@ -1164,14 +1168,9 @@ const validateUpdateProperty = [
       return true;
     }),
 
-  body("location.area").custom(async (area, { req }) => {
-    // Check if area is required (empty string check)
-    if (area === "") {
-      throw new Error("Location area is required");
-    }
-
-    // Skip validation if area is not being updated (null/undefined)
-    if (!area) {
+  body("location.area").optional().custom(async (area, { req }) => {
+    // Skip validation if area is not provided
+    if (area === null || area === undefined || area === "") {
       return true;
     }
 
@@ -1204,7 +1203,7 @@ const validateUpdateProperty = [
     }
 
     if (!emirate) {
-      throw new Error("Emirate must be selected before area");
+      return true; // Make emirate optional for area validation
     }
 
     const validAreasForEmirate = EMIRATE_AREA_MAP[emirate];
@@ -1226,7 +1225,12 @@ const validateUpdateProperty = [
 
   // Property details validation
 
-  body("details.bedrooms").custom((bedrooms, { req }) => {
+  body("details.bedrooms").optional().custom((bedrooms, { req }) => {
+    // Skip validation if bedrooms is not provided
+    if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
+      return true;
+    }
+
     const propertyType = req.body.propertyType;
 
     // For studio and office property types, bedrooms should not be provided
@@ -1239,9 +1243,6 @@ const validateUpdateProperty = [
       }
       // If bedrooms is null or undefined (field not sent or explicitly null), that's perfectly fine
       return true;
-    } // For all other property types, bedrooms are required
-    else if (bedrooms === null || bedrooms === undefined || bedrooms === "") {
-      throw new Error("Number of bedrooms is required");
     } else if (!Number.isInteger(Number(bedrooms)) || Number(bedrooms) < 0) {
       throw new Error("Bedrooms must be a non-negative integer");
     }
@@ -1249,10 +1250,10 @@ const validateUpdateProperty = [
     return true;
   }),
 
-  body("details.bathrooms").custom((bathrooms, { req }) => {
-    // Check if bathrooms is required (empty string check)
-    if (bathrooms === null) {
-      throw new Error("Number of bathrooms is required");
+  body("details.bathrooms").optional().custom((bathrooms, { req }) => {
+    // Skip validation if bathrooms is not provided
+    if (bathrooms === null || bathrooms === undefined || bathrooms === "") {
+      return true;
     }
 
     // Convert to number and validate it's a non-negative integer
@@ -1271,10 +1272,10 @@ const validateUpdateProperty = [
     return true;
   }),
 
-  body("details.area").custom((area, { req }) => {
-    // Check if area is required (empty string check)
-    if (area === null) {
-      throw new Error("Property area is required");
+  body("details.area").optional().custom((area, { req }) => {
+    // Skip validation if area is not provided
+    if (area === null || area === undefined || area === "") {
+      return true;
     }
 
     // Convert to number and validate it's a positive float
