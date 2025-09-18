@@ -2065,6 +2065,39 @@ const parseEnhancedFormData = (req, res, next) => {
       req.imageMetadata = imageMetadata.filter(Boolean); // Store in req for later use
     }
 
+    // Clean up numeric fields - convert invalid values to undefined
+    const cleanNumericField = (value) => {
+      if (value === null || value === undefined || value === '' || value === 'NaN' || value === 'null' || value === 'undefined') {
+        return undefined;
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed === '' || trimmed === 'NaN' || trimmed === 'null' || trimmed === 'undefined') {
+          return undefined;
+        }
+      }
+      return value;
+    };
+
+    // Clean numeric fields in the main object
+    if (parsedBody.price !== undefined) {
+      parsedBody.price = cleanNumericField(parsedBody.price);
+    }
+
+    // Clean numeric fields in details object
+    if (parsedBody.details) {
+      ['bedrooms', 'bathrooms', 'area', 'totalFloors', 'landArea', 'yearBuilt'].forEach(field => {
+        if (parsedBody.details[field] !== undefined) {
+          parsedBody.details[field] = cleanNumericField(parsedBody.details[field]);
+        }
+      });
+      
+      // Clean parking spaces
+      if (parsedBody.details.parking && parsedBody.details.parking.spaces !== undefined) {
+        parsedBody.details.parking.spaces = cleanNumericField(parsedBody.details.parking.spaces);
+      }
+    }
+
     // Update req.body with parsed data
     req.body = parsedBody;
     console.log("Final parsed body:", JSON.stringify(req.body, null, 2));
