@@ -2030,6 +2030,22 @@ const parseEnhancedFormData = (req, res, next) => {
       parsedBody.amenities = amenities.filter(Boolean); // Remove empty slots
     }
 
+    // Parse tags for blog posts - handle JSON string format
+    if (req.body.tags && typeof req.body.tags === "string") {
+      try {
+        const parsedTags = JSON.parse(req.body.tags);
+        if (Array.isArray(parsedTags)) {
+          parsedBody.tags = parsedTags;
+        }
+      } catch (error) {
+        console.error("Failed to parse tags JSON:", error);
+        // Keep original string value if parsing fails
+      }
+    } else if (req.body.tags && Array.isArray(req.body.tags)) {
+      // Tags are already an array, use them directly
+      parsedBody.tags = req.body.tags;
+    }
+
     // Parse image metadata - handle both individual fields and JSON string
     let imageMetadata = [];
 
@@ -2731,21 +2747,23 @@ const validateCreateBlog = [
           throw new Error("Tags must be an array or comma-separated string");
         }
 
-        if (tagArray.length > 10) {
+        // Clean and validate tags (no more double-encoding handling needed)
+        const cleanedTags = tagArray
+          .map(tag => typeof tag === 'string' ? tag.trim() : String(tag).trim())
+          .filter(tag => tag.length > 0);
+
+        if (cleanedTags.length > 10) {
           throw new Error("Maximum 10 tags allowed");
         }
 
         // Validate each tag
-        for (const tag of tagArray) {
-          if (typeof tag !== "string" || tag.trim().length === 0) {
-            throw new Error("Each tag must be a non-empty string");
-          }
-          if (tag.trim().length > 50) {
+        for (const tag of cleanedTags) {
+          if (tag.length > 50) {
             throw new Error("Each tag must not exceed 50 characters");
           }
         }
 
-        req.body.tags = tagArray.map((tag) => tag.trim());
+        req.body.tags = cleanedTags;
       }
 
       return true;
@@ -2888,21 +2906,23 @@ const validateUpdateBlog = [
           throw new Error("Tags must be an array or comma-separated string");
         }
 
-        if (tagArray.length > 10) {
+        // Clean and validate tags (no more double-encoding handling needed)
+        const cleanedTags = tagArray
+          .map(tag => typeof tag === 'string' ? tag.trim() : String(tag).trim())
+          .filter(tag => tag.length > 0);
+
+        if (cleanedTags.length > 10) {
           throw new Error("Maximum 10 tags allowed");
         }
 
         // Validate each tag
-        for (const tag of tagArray) {
-          if (typeof tag !== "string" || tag.trim().length === 0) {
-            throw new Error("Each tag must be a non-empty string");
-          }
-          if (tag.trim().length > 50) {
+        for (const tag of cleanedTags) {
+          if (tag.length > 50) {
             throw new Error("Each tag must not exceed 50 characters");
           }
         }
 
-        req.body.tags = tagArray.map((tag) => tag.trim());
+        req.body.tags = cleanedTags;
       }
 
       return true;

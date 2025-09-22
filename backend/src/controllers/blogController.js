@@ -312,8 +312,8 @@ const createBlogWithImages = async (req, res) => {
       });
     }
 
-    const blogData = req.validatedData;
-    const processedImages = req.processedImages || [];
+    const blogData = req.validatedData || req.body;
+    const processedImages = req.processedImages || req.uploadedImages || [];
 
     // Verify category exists
     if (blogData.category) {
@@ -326,10 +326,17 @@ const createBlogWithImages = async (req, res) => {
       }
     }
 
+    // Map processed images to blog schema format
+    const blogImages = processedImages.map((img, index) => ({
+      url: img.url,
+      alt: img.altText || `Blog image ${index + 1}`,
+      caption: img.caption || '',
+    }));
+
     // Create blog with processed images
     const blog = new Blog({
       ...blogData,
-      images: processedImages,
+      images: blogImages,
       author: req.user.id,
     });
 
