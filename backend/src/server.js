@@ -24,6 +24,7 @@ const propertyApprovalRoutes = require("./routes/propertyApproval");
 const uploadRoutes = require("./routes/upload");
 const userRoutes = require("./routes/users");
 const emailRoutes = require("./routes/email");
+const newsletterRoutes = require("./routes/newsletter");
 const blogRoutes = require("./routes/blogs");
 const blogCategoryRoutes = require("./routes/blogCategories");
 const blogCategoryApprovalRoutes = require("./routes/blogCategoryApproval");
@@ -64,8 +65,8 @@ app.use(
 );
 
 // Body parsing middleware - Increased limits for image uploads
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use(express.json({ limit: "110mb" }));
+app.use(express.urlencoded({ extended: true, limit: "110mb" }));
 
 // Compression middleware
 app.use(compression());
@@ -105,6 +106,7 @@ app.use("/api/property-approval", propertyApprovalRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/blog-categories", blogCategoryRoutes);
 app.use("/api/blog-category-approval", blogCategoryApprovalRoutes);
