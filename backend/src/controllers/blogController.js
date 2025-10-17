@@ -191,13 +191,13 @@ const getBlog = async (req, res) => {
     const { id } = req.params;
     const userRole = req.userRole || "visitor";
 
-    // Build query - try to find by ID first, then by slug
+    // Build query - try to find by ID first, then by slug, then by focus keyword
     let query;
     if (id.match(/^[0-9a-fA-F]{24}$/)) {
       // Valid ObjectId
       query = { _id: id };
     } else {
-      // Assume it's a slug
+      // Try by slug first, then by focus keyword
       query = { slug: id };
     }
 
@@ -206,9 +206,21 @@ const getBlog = async (req, res) => {
       query.status = "published";
     }
 
-    const blog = await Blog.findOne(query)
+    let blog = await Blog.findOne(query)
       .populate("category", "name slug color description")
       .populate("author", "name email");
+
+    // If not found by slug and it's not an ObjectId, try by focus keyword
+    if (!blog && !id.match(/^[0-9a-fA-F]{24}$/)) {
+      const focusKeywordQuery = { focusKeyword: id };
+      if (userRole === "visitor") {
+        focusKeywordQuery.status = "published";
+      }
+      
+      blog = await Blog.findOne(focusKeywordQuery)
+        .populate("category", "name slug color description")
+        .populate("author", "name email");
+    }
 
     if (!blog) {
       return res.status(404).json({

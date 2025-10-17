@@ -133,6 +133,12 @@ const propertySchema = new mongoose.Schema(
       lowercase: true,
       required: false, // Auto-generated in pre-save hook
     },
+    focusKeyword: {
+      type: String,
+      required: [true, "Focus keyword is required"],
+      trim: true,
+      lowercase: true
+    },
     description: {
       type: String,
       required: true,
@@ -186,6 +192,17 @@ const propertySchema = new mongoose.Schema(
       enum: LISTING_TYPES,
       required: true,
     },
+    // META Information fields
+    metaTitle: {
+      type: String,
+      required: true,
+      maxlength: 1000,
+    },
+    metaDescription: {
+      type: String,
+      required: true,
+      maxlength: 1000,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -229,6 +246,7 @@ const propertySchema = new mongoose.Schema(
 
 // Indexes for better query performance
 propertySchema.index({ slug: 1 });
+propertySchema.index({ focusKeyword: 1 });
 propertySchema.index({ status: 1, listingType: 1 });
 propertySchema.index({ propertyType: 1 });
 propertySchema.index({ price: 1 });
@@ -253,8 +271,10 @@ propertySchema.index({
 
 // Generate slug before saving
 propertySchema.pre("save", function (next) {
-  if (this.isModified("title") || this.isNew || !this.slug) {
-    this.slug = slugify(this.title, {
+  if (this.isModified("title") || this.isModified("focusKeyword") || this.isNew || !this.slug) {
+    // Use focusKeyword if available, otherwise use title
+    const sourceText = this.focusKeyword || this.title;
+    this.slug = slugify(sourceText, {
       lower: true,
       strict: true,
       remove: /[*+~.()'"!:@]/g,

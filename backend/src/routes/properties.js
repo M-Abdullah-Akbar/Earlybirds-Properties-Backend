@@ -33,6 +33,7 @@ const {
   parseFormDataOnly,
   parsePropertyDataFromFormData,
   parseEnhancedFormData,
+  validateFocusKeywordUniqueness,
 } = require("../middleware/validation");
 
 /**
@@ -104,6 +105,7 @@ router.post(
   checkPermission("properties", "Create"),
   parseMultipartData,
   parseEnhancedFormData,
+  validateFocusKeywordUniqueness,
   // createPropertyWithImagesValidation, // Validation disabled
   processValidatedImages,
   createPropertyWithImages
@@ -132,6 +134,7 @@ router
     checkPermission("properties", "Update"),
     parseMultipartData,
     parseEnhancedFormData,
+    validateFocusKeywordUniqueness,
     // updatePropertyValidation, // Validation disabled
     processValidatedImages,
     updateProperty

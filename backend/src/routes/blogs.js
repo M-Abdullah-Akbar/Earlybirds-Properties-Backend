@@ -27,6 +27,7 @@ const {
   blogQueryValidation,
   singleBlogValidation,
   parseEnhancedFormData,
+  validateFocusKeywordUniqueness,
 } = require("../middleware/validation");
 
 /**
@@ -67,7 +68,7 @@ router.get("/", optionalAuth, checkPermission("blogs", "Read"), blogQueryValidat
  * @desc    Create blog (simple JSON)
  * @access  Admin only
  */
-router.post("/", auth, checkPermission("blogs", "Create"), createBlogValidation, createBlog);
+router.post("/", auth, checkPermission("blogs", "Create"), validateFocusKeywordUniqueness, createBlogValidation, createBlog);
 
 /**
  * @route   POST /api/blogs/with-images
@@ -80,6 +81,7 @@ router.post(
   checkPermission("blogs", "Create"),
   parseMultipartData,
   parseEnhancedFormData,
+  validateFocusKeywordUniqueness,
   createBlogValidation,
   processValidatedImages,
   createBlogWithImages
@@ -98,7 +100,7 @@ router
    * @desc    Update blog (simple JSON)
    * @access  Admin only
    */
-  .put(auth, checkPermission("blogs", "Update"), updateBlogValidation, updateBlogSimple)
+  .put(auth, checkPermission("blogs", "Update"), validateFocusKeywordUniqueness, updateBlogValidation, updateBlogSimple)
   /**
    * @route   DELETE /api/blogs/:id
    * @desc    Delete blog
@@ -117,6 +119,7 @@ router.put(
   checkPermission("blogs", "Update"),
   parseMultipartData,
   parseEnhancedFormData,
+  validateFocusKeywordUniqueness,
   updateBlogValidation,
   processValidatedImages,
   updateBlog

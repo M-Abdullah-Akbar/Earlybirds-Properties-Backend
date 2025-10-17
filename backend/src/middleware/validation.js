@@ -10,6 +10,8 @@ const {
 } = require("../constants/propertyTypes");
 
 const { validateImageUrl } = require("./localImageValidation");
+const Property = require("../models/Property");
+const Blog = require("../models/Blog");
 
 /**
  * Middleware to handle validation errors
@@ -948,6 +950,55 @@ const validateCreateProperty = [
     return true;
   }),
 
+  // META Information validation
+  body("metaTitle")
+    .notEmpty()
+    .withMessage("Meta title is required")
+    .custom((metaTitle, { req }) => {
+      // Trim the meta title
+      metaTitle = metaTitle.trim();
+
+      // Length validation
+      if (metaTitle.length < 10) {
+        throw new Error("Meta title must be at least 10 characters long");
+      } else if (metaTitle.length > 1000) {
+        throw new Error("Meta title cannot exceed 1000 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(metaTitle)) {
+        throw new Error("Meta title must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed meta title
+      req.body.metaTitle = metaTitle;
+      return true;
+    }),
+
+  body("metaDescription")
+    .notEmpty()
+    .withMessage("Meta description is required")
+    .custom((metaDescription, { req }) => {
+      // Trim the meta description
+      metaDescription = metaDescription.trim();
+
+      // Length validation
+      if (metaDescription.length < 50) {
+        throw new Error("Meta description must be at least 50 characters long");
+      } else if (metaDescription.length > 1000) {
+        throw new Error("Meta description cannot exceed 1000 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(metaDescription)) {
+        throw new Error("Meta description must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed meta description
+      req.body.metaDescription = metaDescription;
+      return true;
+    }),
+
   cleanupParkingFields,
   handleValidationErrors,
 ];
@@ -1788,6 +1839,55 @@ const validateUpdateProperty = [
           )}`
         );
       }
+      return true;
+    }),
+
+  // META Information validation
+  body("metaTitle")
+    .notEmpty()
+    .withMessage("Meta title is required")
+    .custom((metaTitle, { req }) => {
+      // Trim the meta title
+      metaTitle = metaTitle.trim();
+
+      // Length validation
+      if (metaTitle.length < 10) {
+        throw new Error("Meta title must be at least 10 characters long");
+      } else if (metaTitle.length > 1000) {
+        throw new Error("Meta title cannot exceed 1000 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(metaTitle)) {
+        throw new Error("Meta title must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed meta title
+      req.body.metaTitle = metaTitle;
+      return true;
+    }),
+
+  body("metaDescription")
+    .notEmpty()
+    .withMessage("Meta description is required")
+    .custom((metaDescription, { req }) => {
+      // Trim the meta description
+      metaDescription = metaDescription.trim();
+
+      // Length validation
+      if (metaDescription.length < 50) {
+        throw new Error("Meta description must be at least 50 characters long");
+      } else if (metaDescription.length > 1000) {
+        throw new Error("Meta description cannot exceed 1000 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(metaDescription)) {
+        throw new Error("Meta description must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed meta description
+      req.body.metaDescription = metaDescription;
       return true;
     }),
 
@@ -2784,6 +2884,55 @@ const validateCreateBlog = [
     .isBoolean()
     .withMessage("Featured must be a boolean"),
 
+  // META Information validation
+  body("metaTitle")
+    .notEmpty()
+    .withMessage("Meta title is required")
+    .custom((metaTitle, { req }) => {
+      // Trim the meta title
+      metaTitle = metaTitle.trim();
+
+      // Length validation
+      if (metaTitle.length < 10) {
+        throw new Error("Meta title must be at least 10 characters long");
+      } else if (metaTitle.length > 1000) {
+        throw new Error("Meta title cannot exceed 1000 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(metaTitle)) {
+        throw new Error("Meta title must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed meta title
+      req.body.metaTitle = metaTitle;
+      return true;
+    }),
+
+  body("metaDescription")
+    .notEmpty()
+    .withMessage("Meta description is required")
+    .custom((metaDescription, { req }) => {
+      // Trim the meta description
+      metaDescription = metaDescription.trim();
+
+      // Length validation
+      if (metaDescription.length < 50) {
+        throw new Error("Meta description must be at least 50 characters long");
+      } else if (metaDescription.length > 1000) {
+        throw new Error("Meta description cannot exceed 1000 characters");
+      }
+
+      // Check for meaningful content (not just spaces/special chars)
+      if (!/[a-zA-Z]/.test(metaDescription)) {
+        throw new Error("Meta description must contain at least some letters");
+      }
+
+      // Update the request body with the trimmed meta description
+      req.body.metaDescription = metaDescription;
+      return true;
+    }),
+
   body("metaKeywords")
     .optional()
     .custom((metaKeywords, { req }) => {
@@ -2942,6 +3091,57 @@ const validateUpdateBlog = [
     .optional()
     .isBoolean()
     .withMessage("Featured must be a boolean"),
+
+  // META Information validation
+  body("metaTitle")
+    .optional()
+    .custom((metaTitle, { req }) => {
+      if (metaTitle !== undefined) {
+        // Trim the meta title
+        metaTitle = metaTitle.trim();
+
+        // Length validation
+        if (metaTitle.length < 10) {
+          throw new Error("Meta title must be at least 10 characters long");
+        } else if (metaTitle.length > 1000) {
+          throw new Error("Meta title cannot exceed 1000 characters");
+        }
+
+        // Check for meaningful content (not just spaces/special chars)
+        if (!/[a-zA-Z]/.test(metaTitle)) {
+          throw new Error("Meta title must contain at least some letters");
+        }
+
+        // Update the request body with the trimmed meta title
+        req.body.metaTitle = metaTitle;
+      }
+      return true;
+    }),
+
+  body("metaDescription")
+    .optional()
+    .custom((metaDescription, { req }) => {
+      if (metaDescription !== undefined) {
+        // Trim the meta description
+        metaDescription = metaDescription.trim();
+
+        // Length validation
+        if (metaDescription.length < 50) {
+          throw new Error("Meta description must be at least 50 characters long");
+        } else if (metaDescription.length > 1000) {
+          throw new Error("Meta description cannot exceed 1000 characters");
+        }
+
+        // Check for meaningful content (not just spaces/special chars)
+        if (!/[a-zA-Z]/.test(metaDescription)) {
+          throw new Error("Meta description must contain at least some letters");
+        }
+
+        // Update the request body with the trimmed meta description
+        req.body.metaDescription = metaDescription;
+      }
+      return true;
+    }),
 
   body("metaKeywords")
     .optional()
@@ -3244,6 +3444,81 @@ const updateBlogCategoryValidation = [
   ...validateUpdateBlogCategory,
 ];
 
+/**
+ * Validates that a focus keyword is unique across both properties and blogs
+ * @param {string} focusKeyword - The focus keyword to validate
+ * @param {string} excludeId - Optional ID to exclude from uniqueness check (for updates)
+ * @param {string} excludeType - Optional type to exclude from uniqueness check ('property' or 'blog')
+ * @returns {Promise<boolean>} - True if unique, false if not
+ */
+const isFocusKeywordUnique = async (focusKeyword, excludeId = null, excludeType = null) => {
+  try {
+    const normalizedKeyword = focusKeyword.toLowerCase().trim();
+    
+    // Check in properties
+    const propertyQuery = { focusKeyword: normalizedKeyword };
+    if (excludeId && excludeType === 'property') {
+      propertyQuery._id = { $ne: excludeId };
+    }
+    const existingProperty = await Property.findOne(propertyQuery);
+    
+    // Check in blogs
+    const blogQuery = { focusKeyword: normalizedKeyword };
+    if (excludeId && excludeType === 'blog') {
+      blogQuery._id = { $ne: excludeId };
+    }
+    const existingBlog = await Blog.findOne(blogQuery);
+    
+    // Return true if no conflicts found
+    return !existingProperty && !existingBlog;
+  } catch (error) {
+    console.error("Error validating focus keyword uniqueness:", error);
+    return false;
+  }
+};
+
+/**
+ * Middleware function to validate focus keyword uniqueness
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware function
+ */
+const validateFocusKeywordUniqueness = async (req, res, next) => {
+  try {
+    const { focusKeyword } = req.body;
+    
+    if (!focusKeyword) {
+      return next(); // Let model validation handle required field
+    }
+    
+    const excludeId = req.params.id;
+    const excludeType = req.baseUrl.includes('/properties') ? 'property' : 'blog';
+    
+    const isUnique = await isFocusKeywordUnique(focusKeyword, excludeId, excludeType);
+    
+    if (!isUnique) {
+      return res.status(400).json({
+        success: false,
+        error: "Focus keyword already exists",
+        details: [
+          {
+            field: "focusKeyword",
+            message: "This focus keyword is already in use by another property or blog. Please choose a different one.",
+          },
+        ],
+      });
+    }
+    
+    next();
+  } catch (error) {
+    console.error("Error in focus keyword validation middleware:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to validate focus keyword",
+    });
+  }
+};
+
 module.exports = {
   handleValidationErrors,
   loginValidation,
@@ -3275,4 +3550,7 @@ module.exports = {
   updateBlogCategoryValidation,
   blogCategoryQueryValidation,
   singleBlogCategoryValidation,
+  // Focus keyword validation
+  isFocusKeywordUnique,
+  validateFocusKeywordUniqueness,
 };

@@ -14,6 +14,12 @@ const blogSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    focusKeyword: {
+      type: String,
+      required: [true, "Focus keyword is required"],
+      trim: true,
+      lowercase: true
+    },
     content: {
       type: String,
       required: [true, "Blog content is required"],
@@ -55,6 +61,18 @@ const blogSchema = new mongoose.Schema(
       },
     ],
 
+    // META Information fields
+    metaTitle: {
+      type: String,
+      required: true,
+      maxlength: 1000,
+    },
+    metaDescription: {
+      type: String,
+      required: true,
+      maxlength: 1000,
+    },
+
     publishedAt: {
       type: Date,
     },
@@ -64,10 +82,12 @@ const blogSchema = new mongoose.Schema(
   }
 );
 
-// Create slug from title before saving
+// Create slug from focusKeyword or title before saving
 blogSchema.pre("save", function (next) {
-  if (this.isModified("title") || this.isNew) {
-    this.slug = this.title
+  if (this.isModified("title") || this.isModified("focusKeyword") || this.isNew) {
+    // Use focusKeyword if available, otherwise use title
+    const sourceText = this.focusKeyword || this.title;
+    this.slug = sourceText
       .toLowerCase()
       .replace(/[^a-zA-Z0-9\s]/g, "")
       .replace(/\s+/g, "-")
@@ -113,6 +133,7 @@ blogSchema.pre("save", async function (next) {
 
 // Indexes for better performance
 blogSchema.index({ slug: 1 });
+blogSchema.index({ focusKeyword: 1 });
 blogSchema.index({ status: 1 });
 blogSchema.index({ category: 1 });
 blogSchema.index({ author: 1 });

@@ -498,7 +498,7 @@ const getProperty = async (req, res) => {
     // Build query filter based on user role (from ACL middleware)
     const baseQuery = req.queryFilters || {};
 
-    // Try to find by ID first, then by slug
+    // Try to find by ID first, then by slug, then by focus keyword
     let property = null;
 
     try {
@@ -514,6 +514,14 @@ const getProperty = async (req, res) => {
     // If not found by ID, try by slug
     if (!property) {
       property = await Property.findOne({ slug: id, ...baseQuery }).populate(
+        "createdBy",
+        "name email"
+      );
+    }
+
+    // If not found by slug, try by focus keyword
+    if (!property) {
+      property = await Property.findOne({ focusKeyword: id, ...baseQuery }).populate(
         "createdBy",
         "name email"
       );
@@ -1015,7 +1023,11 @@ const updateProperty = async (req, res) => {
     }
 
     if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err) => err.message);
+      const errors = Object.values(error.errors).map((err) => ({
+        field: err.path,
+        message: err.message,
+        value: err.value
+      }));
       return res.status(400).json({
         success: false,
         error: "Validation failed",
