@@ -325,7 +325,7 @@ const createBlogWithImages = async (req, res) => {
     }
 
     const blogData = req.validatedData || req.body;
-    const processedImages = req.processedImages || req.uploadedImages || [];
+    const processedImages = req.uploadedImages || req.processedImages || [];
 
     // Verify category exists
     if (blogData.category) {
@@ -336,6 +336,33 @@ const createBlogWithImages = async (req, res) => {
           error: "Invalid category ID",
         });
       }
+    }
+
+    // Validate that we have exactly 1 image for blogs
+    if (processedImages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Exactly one image is required for blogs",
+        details: [
+          {
+            field: "images",
+            message: "Exactly one image is required for blogs",
+          },
+        ],
+      });
+    }
+
+    if (processedImages.length > 1) {
+      return res.status(400).json({
+        success: false,
+        error: "Blogs can only have one image. Please remove extra images.",
+        details: [
+          {
+            field: "images",
+            message: "Blogs can only have one image. Please remove extra images.",
+          },
+        ],
+      });
     }
 
     // Map processed images to blog schema format
@@ -368,8 +395,8 @@ const createBlogWithImages = async (req, res) => {
     console.error("Error creating blog:", error);
 
     // Clean up uploaded images if blog creation failed
-    if (req.processedImages && req.processedImages.length > 0) {
-      for (const image of req.processedImages) {
+    if (req.uploadedImages && req.uploadedImages.length > 0) {
+      for (const image of req.uploadedImages) {
         try {
           await deleteLocalImageFiles(image.publicId);
         } catch (cleanupError) {
@@ -461,7 +488,14 @@ const updateBlog = async (req, res) => {
   try {
     const { id } = req.params;
     const blogData = req.validatedData || req.body;
-    const processedImages = req.processedImages || [];
+    const processedImages = req.uploadedImages || req.processedImages || [];
+
+    // Debug logging
+    console.log("🔍 BLOG UPDATE DEBUG:");
+    console.log("- blogData.existingImages:", blogData.existingImages);
+    console.log("- processedImages length:", processedImages.length);
+    console.log("- req.body keys:", Object.keys(req.body));
+    console.log("- req.files:", req.files ? req.files.length : "undefined");
 
     // Find existing blog
     const existingBlog = await Blog.findById(id);
@@ -495,12 +529,119 @@ const updateBlog = async (req, res) => {
     }
 
     // Handle image updates
-    let updatedImages = existingBlog.images || [];
+    let updatedImages = [];
 
-    if (processedImages.length > 0) {
-      // Add new images
-      updatedImages = [...updatedImages, ...processedImages];
+    // Handle existing images that should be kept
+    if (blogData.existingImages !== undefined) {
+      console.log("📷 Processing existingImages:", blogData.existingImages);
+      try {
+        const existingImages = JSON.parse(blogData.existingImages);
+        if (Array.isArray(existingImages)) {
+          updatedImages = [...existingImages];
+          console.log(`📷 Keeping ${existingImages.length} existing images:`, existingImages.map(img => ({ _id: img._id, url: img.url })));
+        }
+      } catch (error) {
+        console.error("❌ Error parsing existingImages:", error);
+        console.error("❌ Raw existingImages value:", blogData.existingImages);
+      }
+    } else {
+      console.log("📷 No existingImages field found in blogData");
     }
+
+    // Handle new uploaded images
+    if (processedImages.length > 0) {
+      console.log(`📷 Adding ${processedImages.length} new images`);
+      
+      const newImages = processedImages.map((image, index) => {
+        // Get metadata from imageMetadata if available
+        const metadata = req.imageMetadata && req.imageMetadata[index] 
+          ? req.imageMetadata[index] 
+          : {};
+
+        return {
+          url: image.url,
+          publicId: image.publicId,
+          altText: metadata.altText || `Blog image ${updatedImages.length + index + 1}`,
+          order: updatedImages.length + index,
+          isMain: metadata.isMain === "true" || metadata.isMain === true,
+          originalName: image.originalName,
+          size: image.size,
+          format: image.format,
+          width: image.width,
+          height: image.height,
+        };
+      });
+
+      updatedImages = [...updatedImages, ...newImages];
+    }
+
+    // If no image data is provided at all, keep existing images unchanged
+    if (blogData.existingImages === undefined && processedImages.length === 0) {
+      console.log("📷 No image changes requested, keeping existing images");
+      updatedImages = existingBlog.images || [];
+    }
+
+    // Validate that we have exactly 1 image for blogs
+    if (updatedImages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "At least one image is required for blogs",
+        details: [
+          {
+            field: "images",
+            message: "At least one image is required for blogs",
+          },
+        ],
+      });
+    }
+
+    if (updatedImages.length > 1) {
+      return res.status(400).json({
+        success: false,
+        error: "Blogs can only have one image. Please remove extra images.",
+        details: [
+          {
+            field: "images",
+            message: "Blogs can only have one image. Please remove extra images.",
+          },
+        ],
+      });
+    }
+
+    // Ensure only one image is marked as main
+    if (updatedImages.length > 0) {
+      const mainImages = updatedImages.filter((img) => img.isMain);
+      if (mainImages.length > 1) {
+        // If multiple images are marked as main, keep only the first one
+        let foundMain = false;
+        updatedImages = updatedImages.map((img) => {
+          if (img.isMain && !foundMain) {
+            foundMain = true;
+            return img;
+          } else if (img.isMain && foundMain) {
+            return { ...img, isMain: false };
+          }
+          return img;
+        });
+      } else if (mainImages.length === 0) {
+        // If no image is marked as main, mark the first one as main
+        updatedImages[0].isMain = true;
+      }
+
+      // Update order to be sequential
+      updatedImages = updatedImages.map((img, index) => ({
+        ...img,
+        order: index,
+      }));
+    }
+
+    // Debug final images array
+    console.log("📷 Final updatedImages array:", updatedImages.map(img => ({ 
+      _id: img._id, 
+      url: img.url, 
+      isMain: img.isMain,
+      isExisting: img._id ? true : false 
+    })));
 
     // Update blog
     const updatedBlog = await Blog.findByIdAndUpdate(
@@ -524,8 +665,8 @@ const updateBlog = async (req, res) => {
     console.error("Error updating blog:", error);
 
     // Clean up uploaded images if update failed
-    if (req.processedImages && req.processedImages.length > 0) {
-      for (const image of req.processedImages) {
+    if (req.uploadedImages && req.uploadedImages.length > 0) {
+      for (const image of req.uploadedImages) {
         try {
           await deleteLocalImageFiles(image.publicId);
         } catch (cleanupError) {

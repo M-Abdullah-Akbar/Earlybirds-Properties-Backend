@@ -82,6 +82,15 @@ const blogSchema = new mongoose.Schema(
   }
 );
 
+// Convert spaces to hyphens in focusKeyword before saving
+blogSchema.pre("save", function (next) {
+  if (this.focusKeyword && this.isModified("focusKeyword")) {
+    // Convert spaces to hyphens in focusKeyword
+    this.focusKeyword = this.focusKeyword.replace(/\s+/g, '-');
+  }
+  next();
+});
+
 // Create slug from focusKeyword or title before saving
 blogSchema.pre("save", function (next) {
   if (this.isModified("title") || this.isModified("focusKeyword") || this.isNew) {

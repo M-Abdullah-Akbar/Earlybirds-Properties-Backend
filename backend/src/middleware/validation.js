@@ -2163,6 +2163,20 @@ const parseEnhancedFormData = (req, res, next) => {
       }
     }
 
+    // Parse existingImages field (for blog updates)
+    if (req.body.existingImages) {
+      try {
+        if (typeof req.body.existingImages === "string") {
+          parsedBody.existingImages = req.body.existingImages; // Keep as string for JSON.parse in controller
+        } else if (Array.isArray(req.body.existingImages)) {
+          parsedBody.existingImages = JSON.stringify(req.body.existingImages);
+        }
+        console.log("📷 Parsed existingImages:", parsedBody.existingImages);
+      } catch (error) {
+        console.error("Failed to parse existingImages:", error);
+      }
+    }
+
     // Also check for individual imageMetadata fields (legacy format)
     Object.keys(req.body).forEach((key) => {
       if (key.startsWith("imageMetadata[")) {
