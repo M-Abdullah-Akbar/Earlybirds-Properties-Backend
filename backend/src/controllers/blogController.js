@@ -453,17 +453,15 @@ const updateBlogSimple = async (req, res) => {
       }
     }
 
-    // Update blog
-    const updatedBlog = await Blog.findByIdAndUpdate(
-      id,
-      {
-        ...blogData,
-        updatedAt: new Date(),
-      },
-      { new: true, runValidators: true }
-    )
-      .populate("category", "name slug color")
-      .populate("author", "name email");
+    // Update blog using save() to trigger pre-save hooks (including focus keyword conversion)
+    Object.assign(existingBlog, blogData);
+    existingBlog.updatedAt = new Date();
+    
+    const updatedBlog = await existingBlog.save();
+    
+    // Populate the response
+    await updatedBlog.populate("category", "name slug color");
+    await updatedBlog.populate("author", "name email");
 
     res.status(200).json({
       success: true,
@@ -643,18 +641,16 @@ const updateBlog = async (req, res) => {
       isExisting: img._id ? true : false 
     })));
 
-    // Update blog
-    const updatedBlog = await Blog.findByIdAndUpdate(
-      id,
-      {
-        ...blogData,
-        images: updatedImages,
-        updatedAt: new Date(),
-      },
-      { new: true, runValidators: true }
-    )
-      .populate("category", "name slug color")
-      .populate("author", "name email");
+    // Update blog using save() to trigger pre-save hooks (including focus keyword conversion)
+    Object.assign(existingBlog, blogData);
+    existingBlog.images = updatedImages;
+    existingBlog.updatedAt = new Date();
+    
+    const updatedBlog = await existingBlog.save();
+    
+    // Populate the response
+    await updatedBlog.populate("category", "name slug color");
+    await updatedBlog.populate("author", "name email");
 
     res.status(200).json({
       success: true,
