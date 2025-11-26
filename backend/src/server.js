@@ -15,7 +15,7 @@ if (fs.existsSync("./dist/.env")) {
 }
 
 require("dotenv").config({ path: envPath });
-const { connectDB } = require("./config/database.js");
+const { connectDB, mongoose } = require("./config/database.js");
 
 // Import routes
 const authRoutes = require("./routes/auth");
@@ -32,8 +32,37 @@ const errorHandler = require("./middleware/errorHandler.js");
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// Security middleware - optimized for performance
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Disable for better performance
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resources
+}));
+
+// Performance headers - add early to all responses
+app.use((req, res, next) => {
+  // Enable keep-alive for better connection reuse
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Keep-Alive', 'timeout=5, max=1000');
+
+  // Add performance hints
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-DNS-Prefetch-Control', 'on');
+
+  // Enable HTTP/2 Server Push hints (if supported)
+  if (req.path.startsWith('/uploads/') && req.path.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+    res.setHeader('Link', `<${req.path}>; rel=preload; as=image`);
+  }
+
+  next();
+});
 // CORS configuration - Allow multiple origins
 const allowedOrigins = [
   process.env.Admin_URL,
@@ -68,24 +97,49 @@ app.use(
 app.use(express.json({ limit: "110mb" }));
 app.use(express.urlencoded({ extended: true, limit: "110mb" }));
 
-// Compression middleware
-app.use(compression());
+// Compression middleware - optimized for better performance
+app.use(compression({
+  level: 6, // Balance between compression and CPU usage (1-9, 6 is optimal)
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    // Don't compress if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression for all other requests
+    return compression.filter(req, res);
+  }
+}));
 
-// Serve static files from uploads directory
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Serve static files from uploads directory with optimized caching
+app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
+  maxAge: '1y', // Cache for 1 year
+  immutable: true,
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, path) => {
+    // Set aggressive caching for images
+    if (path.match(/\.(jpg|jpeg|png|gif|webp|avif|svg)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(
-    `🌐 Incoming request: ${req.method} ${
-      req.originalUrl
-    } - ${new Date().toISOString()}`
-  );
-  next();
-});
+// Request logging middleware - only in development to reduce overhead
+if (process.env.NODE_ENV === 'development') {
+  app.use((req, res, next) => {
+    console.log(
+      `🌐 Incoming request: ${req.method} ${req.originalUrl
+      } - ${new Date().toISOString()}`
+    );
+    next();
+  });
+}
 
-// API Routes
+// API Routes - with caching headers
 app.get("/api", (req, res) => {
+  // Set cache headers for API info endpoint
+  res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
   res.status(200).json({
     success: true,
     message: "Real Estate API v1.0",
@@ -99,16 +153,20 @@ app.get("/api", (req, res) => {
   });
 });
 
+const apicache = require('apicache');
+const cache = apicache.middleware;
+
 // Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/properties", propertyRoutes);
+// Cache properties and blogs for 5 minutes to reduce DB load
+app.use("/api/properties", cache('5 minutes'), propertyRoutes);
 app.use("/api/property-approval", propertyApprovalRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/newsletter", newsletterRoutes);
-app.use("/api/blogs", blogRoutes);
-app.use("/api/blog-categories", blogCategoryRoutes);
+app.use("/api/blogs", cache('5 minutes'), blogRoutes);
+app.use("/api/blog-categories", cache('5 minutes'), blogCategoryRoutes);
 app.use("/api/blog-category-approval", blogCategoryApprovalRoutes);
 
 app.use(errorHandler);
@@ -120,13 +178,39 @@ app.use("*", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
+// Optimize Express app settings for better performance
+app.set('etag', 'strong'); // Enable ETags for caching
+app.set('x-powered-by', false); // Remove X-Powered-By header (already handled by helmet)
+
 // Connect to database and start server
 const startServer = async () => {
   try {
+    // Connect to database first
     await connectDB();
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+
+    // Start server with optimized settings
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`⚡ Performance optimizations enabled`);
     });
+
+    // Optimize server settings for better performance
+    server.keepAliveTimeout = 65000; // 65 seconds (slightly longer than load balancer)
+    server.headersTimeout = 66000; // 66 seconds (slightly longer than keepAliveTimeout)
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM signal received: closing HTTP server');
+      server.close(() => {
+        console.log('HTTP server closed');
+        mongoose.connection.close(false, () => {
+          console.log('MongoDB connection closed');
+          process.exit(0);
+        });
+      });
+    });
+
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
