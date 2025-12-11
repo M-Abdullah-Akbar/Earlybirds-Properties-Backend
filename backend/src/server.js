@@ -28,6 +28,7 @@ const newsletterRoutes = require("./routes/newsletter");
 const blogRoutes = require("./routes/blogs");
 const blogCategoryRoutes = require("./routes/blogCategories");
 const blogCategoryApprovalRoutes = require("./routes/blogCategoryApproval");
+const jobRoutes = require("./routes/jobs");
 const errorHandler = require("./middleware/errorHandler.js");
 
 const app = express();
@@ -168,6 +169,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/blogs", cache('5 minutes'), blogRoutes);
 app.use("/api/blog-categories", cache('5 minutes'), blogCategoryRoutes);
 app.use("/api/blog-category-approval", blogCategoryApprovalRoutes);
+app.use("/api/jobs", jobRoutes);
 
 app.use(errorHandler);
 
