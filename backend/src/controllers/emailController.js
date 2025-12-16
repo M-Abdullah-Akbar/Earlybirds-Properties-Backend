@@ -263,8 +263,60 @@ const sendInstantValuationEmail = async (req, res) => {
   }
 };
 
+/**
+ * Send job application email
+ * @param {Object} data - Application data
+ */
+const sendJobApplicationEmail = async (data) => {
+  try {
+    const {
+      jobTitle,
+      name,
+      email,
+      phone,
+      message,
+      cvPath,
+      recipient = process.env.EMAIL_USER
+    } = data;
+
+    const transporter = createTransporter();
+
+    // Setup email data
+    const mailOptions = {
+      from: `"EarlyBirds Properties" <${process.env.EMAIL_USER}>`,
+      to: recipient,
+      subject: `New Application: ${jobTitle} - ${name}`,
+      html: `
+        <h2>New Job Application</h2>
+        <p><strong>Job Title:</strong> ${jobTitle}</p>
+        <p><strong>Applicant Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Message:</strong></p>
+        <blockquote style="background: #f9f9f9; padding: 10px; border-left: 5px solid #ccc;">
+          ${message.replace(/\n/g, '<br>')}
+        </blockquote>
+        <p>The CV is attached to this email.</p>
+      `,
+      attachments: [
+        {
+          path: cvPath
+        }
+      ]
+    };
+
+    // Send mail
+    await transporter.sendMail(mailOptions);
+    return true;
+  } catch (error) {
+    console.error('Error sending job application email:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   sendContactEmail,
   sendInstantValuationEmail,
-  sendPropertyInquiryEmail
+  sendPropertyInquiryEmail,
+  sendJobApplicationEmail
 };

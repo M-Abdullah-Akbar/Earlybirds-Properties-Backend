@@ -1,6 +1,6 @@
 const Job = require("../models/Job");
 const ErrorResponse = require("../middleware/errorHandler"); // Assuming ErrorResponse is part of error handling or using standard error throwing
-const sendEmail = require("../controllers/emailController").sendEmail; // Reusing email service if available or creating basic one
+const { sendJobApplicationEmail } = require("../controllers/emailController");
 // Note: existing emailController might export a function or object. I will assume a standard sendEmail utility or import the email controller logic.
 // Checking emailController file content would be good, but for now I will implement basic logic and assume nodemailer availability if needed, 
 // or better yet, reuse the existing email infrastructure.
@@ -105,8 +105,6 @@ exports.deleteJob = async (req, res, next) => {
 // @route   POST /api/jobs/apply
 // @access  Public
 exports.applyForJob = async (req, res, next) => {
-    // This will be implemented to handle file upload and email sending
-    // For now returning success
     try {
         const { jobId, name, email, phone, message } = req.body;
         const job = await Job.findById(jobId);
@@ -115,11 +113,52 @@ exports.applyForJob = async (req, res, next) => {
             return res.status(404).json({ success: false, error: "Job not found" });
         }
 
-        // TODO: Integrate with specific email service logic here
-        // For production ready code, we would use the `nodemailer` setup existing in the project
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: "Please upload a CV" });
+        }
 
-        res.status(200).json({ success: true, message: "Application submitted" });
+        // Create application entry
+        /* 
+           Note: We dynamically require the JobApplication model here to avoid 
+           circular dependency or initialization issues if not globally loaded yet.
+           Ideally it should be at top level but this is safe for now.
+        */
+        const JobApplication = require("../models/JobApplication");
+
+        const application = await JobApplication.create({
+            jobId,
+            name,
+            email,
+            phone,
+            message,
+            cvPath: req.file.path
+        });
+
+        // Use emailController to send notification
+        try {
+            await sendJobApplicationEmail({
+                jobTitle: job.title,
+                name,
+                email,
+                phone,
+                message,
+                cvPath: req.file.path,
+                recipient: process.env.EMAIL_USER || "hr@earlybirdsproperties.com"
+            });
+        } catch (emailError) {
+            console.error("Email sending failed:", emailError);
+            // Continue execution, do not fail the request just because email failed
+        }
+
+        res.status(200).json({ success: true, message: "Application submitted successfully", data: application });
     } catch (err) {
+        // Cleanup uploaded file if DB save fails
+        if (req.file) {
+            const fs = require('fs');
+            fs.unlink(req.file.path, (unlinkErr) => {
+                if (unlinkErr) console.error("Error deleting file after failure:", unlinkErr);
+            });
+        }
         next(err);
     }
 }

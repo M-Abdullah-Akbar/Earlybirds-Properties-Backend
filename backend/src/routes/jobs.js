@@ -12,10 +12,15 @@ const {
 const { auth } = require("../middleware/auth");
 const router = express.Router();
 
+const upload = require("../middleware/uploadMiddleware");
+const { validateJobApplication } = require("../middleware/jobValidators");
+
+const { applyJobLimiter } = require("../middleware/rateLimiter");
+
 // Public routes
 router.get("/", getJobs);
 router.get("/:id", getJob);
-router.post("/apply", applyForJob);
+router.post("/apply", applyJobLimiter, upload.single("cv"), validateJobApplication, applyForJob);
 
 // Protected routes
 router.get("/admin/all", auth, getAllJobsAdmin);
