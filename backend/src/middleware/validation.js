@@ -347,7 +347,7 @@ const validateCreateProperty = [
       if (!title || title === "") {
         return true;
       }
-      
+
       // Check for duplicate titles excluding the current property
       const Property = require("../models/Property");
       const propertyId = req.params.id;
@@ -378,7 +378,7 @@ const validateCreateProperty = [
     if (!description || description === "") {
       return true;
     }
-    
+
     // Trim the description
     description = description.trim();
 
@@ -398,7 +398,7 @@ const validateCreateProperty = [
     if (!propertyType || propertyType === "") {
       return true;
     }
-    
+
     // Must be string
     if (typeof propertyType !== "string") {
       throw new Error("Property type must be a string");
@@ -2053,6 +2053,8 @@ const parsePropertyDataFromFormData = (req, res, next) => {
 const parseEnhancedFormData = (req, res, next) => {
   // If propertyData exists in FormData, parse it and populate req.body (legacy format)
   if (req.body.propertyData) {
+
+
     try {
       const parsedData = JSON.parse(req.body.propertyData);
       Object.assign(req.body, parsedData);
@@ -2221,7 +2223,7 @@ const parseEnhancedFormData = (req, res, next) => {
           parsedBody.details[field] = cleanNumericField(parsedBody.details[field]);
         }
       });
-      
+
       // Clean parking spaces
       if (parsedBody.details.parking && parsedBody.details.parking.spaces !== undefined) {
         parsedBody.details.parking.spaces = cleanNumericField(parsedBody.details.parking.spaces);
@@ -3468,21 +3470,21 @@ const updateBlogCategoryValidation = [
 const isFocusKeywordUnique = async (focusKeyword, excludeId = null, excludeType = null) => {
   try {
     const normalizedKeyword = focusKeyword.toLowerCase().trim();
-    
+
     // Check in properties
     const propertyQuery = { focusKeyword: normalizedKeyword };
     if (excludeId && excludeType === 'property') {
       propertyQuery._id = { $ne: excludeId };
     }
     const existingProperty = await Property.findOne(propertyQuery);
-    
+
     // Check in blogs
     const blogQuery = { focusKeyword: normalizedKeyword };
     if (excludeId && excludeType === 'blog') {
       blogQuery._id = { $ne: excludeId };
     }
     const existingBlog = await Blog.findOne(blogQuery);
-    
+
     // Return true if no conflicts found
     return !existingProperty && !existingBlog;
   } catch (error) {
@@ -3500,16 +3502,16 @@ const isFocusKeywordUnique = async (focusKeyword, excludeId = null, excludeType 
 const validateFocusKeywordUniqueness = async (req, res, next) => {
   try {
     const { focusKeyword } = req.body;
-    
+
     if (!focusKeyword) {
       return next(); // Let model validation handle required field
     }
-    
+
     const excludeId = req.params.id;
     const excludeType = req.baseUrl.includes('/properties') ? 'property' : 'blog';
-    
+
     const isUnique = await isFocusKeywordUnique(focusKeyword, excludeId, excludeType);
-    
+
     if (!isUnique) {
       return res.status(400).json({
         success: false,
@@ -3522,7 +3524,7 @@ const validateFocusKeywordUniqueness = async (req, res, next) => {
         ],
       });
     }
-    
+
     next();
   } catch (error) {
     console.error("Error in focus keyword validation middleware:", error);

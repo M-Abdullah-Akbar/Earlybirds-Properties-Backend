@@ -643,9 +643,8 @@ const createPropertyWithImages = async (req, res) => {
 
       // Provide user-friendly error messages
       let userFriendlyField = field;
-      let userFriendlyMessage = `${
-        field.charAt(0).toUpperCase() + field.slice(1)
-      } already exists`;
+      let userFriendlyMessage = `${field.charAt(0).toUpperCase() + field.slice(1)
+        } already exists`;
 
       if (field === "slug") {
         userFriendlyField = "title"; // Map slug errors to title field for frontend
@@ -655,9 +654,8 @@ const createPropertyWithImages = async (req, res) => {
 
       const errorResponse = {
         success: false,
-        error: `Property with this ${
-          field === "slug" ? "title" : field
-        } already exists`,
+        error: `Property with this ${field === "slug" ? "title" : field
+          } already exists`,
         details: [
           {
             field: userFriendlyField,
@@ -782,6 +780,7 @@ const updateProperty = async (req, res) => {
       updatedBy: req.user.id,
       // updatedAt will be set automatically by the pre-save hook
     };
+
 
     // Helper function to clear rejection reason
     const clearRejectionReason = () => {
@@ -981,6 +980,7 @@ const updateProperty = async (req, res) => {
     // Populate the user fields
     await property.populate("createdBy updatedBy", "name email");
 
+
     res.status(200).json({
       success: true,
       data: { property },
@@ -996,9 +996,8 @@ const updateProperty = async (req, res) => {
 
       // Provide user-friendly error messages
       let userFriendlyField = field;
-      let userFriendlyMessage = `${
-        field.charAt(0).toUpperCase() + field.slice(1)
-      } already exists`;
+      let userFriendlyMessage = `${field.charAt(0).toUpperCase() + field.slice(1)
+        } already exists`;
 
       if (field === "slug") {
         userFriendlyField = "title"; // Map slug errors to title field for frontend
@@ -1008,9 +1007,8 @@ const updateProperty = async (req, res) => {
 
       const errorResponse = {
         success: false,
-        error: `Property with this ${
-          field === "slug" ? "title" : field
-        } already exists`,
+        error: `Property with this ${field === "slug" ? "title" : field
+          } already exists`,
         details: [
           {
             field: userFriendlyField,
@@ -1093,8 +1091,8 @@ const deleteProperty = async (req, res) => {
               property.approvalStatus === "pending"
                 ? "Property is awaiting SuperAdmin approval"
                 : property.approvalStatus === "approved"
-                ? "Property has been approved and cannot be deleted"
-                : "Property is not in a deletable state",
+                  ? "Property has been approved and cannot be deleted"
+                  : "Property is not in a deletable state",
           },
         });
       }
@@ -1123,9 +1121,8 @@ const deleteProperty = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Property deleted successfully along with ${
-        property.images?.length || 0
-      } images`,
+      message: `Property deleted successfully along with ${property.images?.length || 0
+        } images`,
     });
   } catch (error) {
     console.error("Error deleting property:", error);

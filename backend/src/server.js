@@ -154,20 +154,16 @@ app.get("/api", (req, res) => {
   });
 });
 
-const apicache = require('apicache');
-const cache = apicache.middleware;
-
-// Routes
+// Routes (no caching - simpler and avoids issues with write operations)
 app.use("/api/auth", authRoutes);
-// Cache properties and blogs for 5 minutes to reduce DB load
-app.use("/api/properties", cache('5 minutes'), propertyRoutes);
+app.use("/api/properties", propertyRoutes);
 app.use("/api/property-approval", propertyApprovalRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/newsletter", newsletterRoutes);
-app.use("/api/blogs", cache('5 minutes'), blogRoutes);
-app.use("/api/blog-categories", cache('5 minutes'), blogCategoryRoutes);
+app.use("/api/blogs", blogRoutes);
+app.use("/api/blog-categories", blogCategoryRoutes);
 app.use("/api/blog-category-approval", blogCategoryApprovalRoutes);
 app.use("/api/jobs", jobRoutes);
 
